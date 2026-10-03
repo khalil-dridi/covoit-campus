@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../register/register_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -57,9 +58,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      // Plus tard :
-      // navigation vers Login / Register
-    }
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const RegisterScreen(),
+    ),
+  );
+}
   }
 
   @override
