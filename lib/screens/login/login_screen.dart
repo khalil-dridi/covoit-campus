@@ -7,6 +7,10 @@ import '../../models/user.dart';
 import '../../repositories/user_repository.dart';
 import '../register/register_screen.dart';
 
+import '../passenger/passenger_shell.dart';
+import '../driver/driver_shell.dart';
+import '../admin/admin_shell.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -302,11 +306,34 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context);
+  Navigator.pop(context);
 
-                    // Les interfaces Driver / Passenger
-                    // seront ajoutées à l'étape suivante.
-                  },
+  if (user.role == 'passenger') {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PassengerShell(),
+      ),
+      (route) => false,
+    );
+  } else if (user.role == 'driver') {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const DriverShell(),
+      ),
+      (route) => false,
+    );
+  } else if (user.role == 'admin') {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AdminShell(),
+      ),
+      (route) => false,
+    );
+  }
+},
                   style: ElevatedButton.styleFrom(
                     backgroundColor: green,
                     foregroundColor: Colors.white,
