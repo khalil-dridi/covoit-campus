@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../login/login_screen.dart';
+import '../verification/email_verification_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -61,21 +62,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // CREATE ACCOUNT
   // ==========================================================
   void _createAccount() {
-    if (!canSubmit) {
-      return;
-    }
-
-    if (passwordController.text != confirmPasswordController.text) {
-      _showMessage(
-        'Les mots de passe ne correspondent pas.',
-      );
-      return;
-    }
-
-    _showMessage(
-      'Compte prêt à être créé.',
-    );
+  if (!canSubmit) {
+    return;
   }
+
+  if (passwordController.text != confirmPasswordController.text) {
+    _showMessage(
+      'Les mots de passe ne correspondent pas.',
+    );
+    return;
+  }
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => EmailVerificationScreen(
+        email: emailController.text.trim(),
+      ),
+    ),
+  );
+}   
 
   // ==========================================================
   // SHOW MESSAGE
