@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
+
+import 'database/database_helper.dart';
 import 'screens/splash/splash_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialise SQLite au démarrage de l'application.
+  // Cela permet d'exécuter automatiquement les migrations
+  // et de créer le compte Admin par défaut.
+  await DatabaseHelper.instance.database;
+
   runApp(const CovoitCampusApp());
 }
 

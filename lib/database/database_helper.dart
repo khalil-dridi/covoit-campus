@@ -19,22 +19,39 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     final databasePath = await getDatabasesPath();
-    final path = join(databasePath, 'covoit_campus.db');
+    final path = join(
+      databasePath,
+      'covoit_campus.db',
+    );
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
+
       onConfigure: (db) async {
-        await db.execute('PRAGMA foreign_keys = ON');
+        await db.execute(
+          'PRAGMA foreign_keys = ON',
+        );
       },
+
       onCreate: _onCreate,
+
+      onUpgrade: _onUpgrade,
     );
   }
 
-  Future<void> _onCreate(Database db, int version) async {
+  // ==========================================================
+  // CREATE DATABASE
+  // ==========================================================
+
+  Future<void> _onCreate(
+    Database db,
+    int version,
+  ) async {
     // =========================
     // USERS
     // =========================
+
     await db.execute('''
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +72,7 @@ class DatabaseHelper {
     // =========================
     // VEHICLES
     // =========================
+
     await db.execute('''
       CREATE TABLE vehicles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,13 +83,16 @@ class DatabaseHelper {
         license_plate TEXT NOT NULL,
         seats INTEGER NOT NULL,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // PREFERENCES
     // =========================
+
     await db.execute('''
       CREATE TABLE preferences (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,13 +104,16 @@ class DatabaseHelper {
         preferred_gender TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // TRIPS
     // =========================
+
     await db.execute('''
       CREATE TABLE trips (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,14 +130,19 @@ class DatabaseHelper {
         status TEXT NOT NULL DEFAULT 'available',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+        FOREIGN KEY (driver_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (vehicle_id)
+          REFERENCES vehicles(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // BOOKINGS
     // =========================
+
     await db.execute('''
       CREATE TABLE bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,14 +152,19 @@ class DatabaseHelper {
         status TEXT NOT NULL DEFAULT 'pending',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
-        FOREIGN KEY (passenger_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (trip_id)
+          REFERENCES trips(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (passenger_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // MESSAGES
     // =========================
+
     await db.execute('''
       CREATE TABLE messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,15 +174,22 @@ class DatabaseHelper {
         message TEXT NOT NULL,
         is_read INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
-        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (trip_id)
+          REFERENCES trips(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (sender_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (receiver_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // NOTIFICATIONS
     // =========================
+
     await db.execute('''
       CREATE TABLE notifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,13 +199,16 @@ class DatabaseHelper {
         type TEXT,
         is_read INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // RATINGS
     // =========================
+
     await db.execute('''
       CREATE TABLE ratings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,15 +218,22 @@ class DatabaseHelper {
         score INTEGER NOT NULL,
         comment TEXT,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
-        FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (reviewed_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (trip_id)
+          REFERENCES trips(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (reviewer_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // REPORTS
     // =========================
+
     await db.execute('''
       CREATE TABLE reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -193,15 +244,22 @@ class DatabaseHelper {
         description TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
         created_at TEXT NOT NULL,
-        FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (reported_user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE
+        FOREIGN KEY (reporter_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (reported_user_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (trip_id)
+          REFERENCES trips(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // EMERGENCY CONTACTS
     // =========================
+
     await db.execute('''
       CREATE TABLE emergency_contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -210,13 +268,16 @@ class DatabaseHelper {
         phone TEXT NOT NULL,
         relationship TEXT,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
       )
     ''');
 
     // =========================
     // TRIP SHARES
     // =========================
+
     await db.execute('''
       CREATE TABLE trip_shares (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -224,11 +285,83 @@ class DatabaseHelper {
         user_id INTEGER NOT NULL,
         contact_id INTEGER NOT NULL,
         shared_at TEXT NOT NULL,
-        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (contact_id) REFERENCES emergency_contacts(id)
+        FOREIGN KEY (trip_id)
+          REFERENCES trips(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (user_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (contact_id)
+          REFERENCES emergency_contacts(id)
           ON DELETE CASCADE
       )
     ''');
+
+    // =========================
+    // DEFAULT ADMIN
+    // =========================
+
+    await _createDefaultAdmin(db);
+  }
+
+  // ==========================================================
+  // DATABASE UPGRADE
+  // ==========================================================
+
+  Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await _createDefaultAdmin(db);
+    }
+  }
+
+  // ==========================================================
+  // CREATE DEFAULT ADMIN
+  // ==========================================================
+
+  Future<void> _createDefaultAdmin(
+    Database db,
+  ) async {
+    final existingAdmin = await db.query(
+      'users',
+      columns: ['id'],
+      where: 'email = ?',
+      whereArgs: [
+        'admin@covoitcampus.tn',
+      ],
+      limit: 1,
+    );
+
+    // Admin already exists
+    if (existingAdmin.isNotEmpty) {
+      return;
+    }
+
+    final now = DateTime.now().toIso8601String();
+
+    // SHA-256 of:
+    // CovoitAdmin#2026!
+    const adminPasswordHash =
+        '4678a5d7a919ca64607484fa99faa368699da50437b343e3fcf198e157a682aa';
+
+    await db.insert(
+      'users',
+      {
+        'full_name': 'Administrateur',
+        'email': 'admin@covoitcampus.tn',
+        'password_hash': adminPasswordHash,
+        'phone': null,
+        'profile_image': null,
+        'university': null,
+        'role': 'admin',
+        'is_verified': 1,
+        'is_active': 1,
+        'created_at': now,
+        'updated_at': now,
+      },
+    );
   }
 }
