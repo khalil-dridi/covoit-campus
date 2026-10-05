@@ -4,6 +4,7 @@ import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
 import 'home/passenger_home_screen.dart';
 import 'profile/passenger_profile_screen.dart';
+import 'search/passenger_search_screen.dart';
 
 class PassengerShell extends StatefulWidget {
   final User user;
@@ -25,12 +26,7 @@ class _PassengerShellState extends State<PassengerShell> {
     final List<Widget> pages = [
       PassengerHomeScreen(user: widget.user),
 
-      const PlaceholderPage(
-        title: 'Rechercher',
-        subtitle:
-            'Trouvez un trajet qui vous correspond.',
-        icon: Icons.search_rounded,
-      ),
+      PassengerSearchScreen(user: widget.user),
 
       const PlaceholderPage(
         title: 'Réservations',
