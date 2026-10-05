@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
+import 'home/driver_home_screen.dart';
 import 'profile/driver_profile_screen.dart';
 
 class DriverShell extends StatefulWidget {
@@ -22,10 +23,11 @@ class _DriverShellState extends State<DriverShell> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      const PlaceholderPage(
-        title: 'Accueil',
-        subtitle: 'Gérez votre activité de conducteur.',
-        icon: Icons.home_rounded,
+      DriverHomeScreen(
+        user: widget.user,
+        onPublishTap: () => setState(() => _currentIndex = 1),
+        onTripsTap: () => setState(() => _currentIndex = 2),
+        onProfileTap: () => setState(() => _currentIndex = 4),
       ),
       const PlaceholderPage(
         title: 'Publier un trajet',
