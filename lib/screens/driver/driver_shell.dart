@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
+import 'profile/driver_profile_screen.dart';
 
 class DriverShell extends StatefulWidget {
-  const DriverShell({super.key});
+  final User user;
+
+  const DriverShell({
+    super.key,
+    required this.user,
+  });
 
   @override
   State<DriverShell> createState() => _DriverShellState();
@@ -12,40 +19,36 @@ class DriverShell extends StatefulWidget {
 class _DriverShellState extends State<DriverShell> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    PlaceholderPage(
-      title: 'Accueil',
-      subtitle: 'Gérez votre activité de conducteur.',
-      icon: Icons.home_rounded,
-    ),
-    PlaceholderPage(
-      title: 'Publier un trajet',
-      subtitle: 'Proposez un nouveau trajet aux étudiants.',
-      icon: Icons.add_circle_outline_rounded,
-    ),
-    PlaceholderPage(
-      title: 'Mes trajets',
-      subtitle: 'Gérez vos trajets publiés.',
-      icon: Icons.directions_car_outlined,
-    ),
-    PlaceholderPage(
-      title: 'Messages',
-      subtitle: 'Discutez avec vos passagers.',
-      icon: Icons.chat_bubble_outline_rounded,
-    ),
-    PlaceholderPage(
-      title: 'Profil',
-      subtitle: 'Gérez votre profil et votre véhicule.',
-      icon: Icons.person_outline_rounded,
-    ),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final pages = <Widget>[
+      const PlaceholderPage(
+        title: 'Accueil',
+        subtitle: 'Gérez votre activité de conducteur.',
+        icon: Icons.home_rounded,
+      ),
+      const PlaceholderPage(
+        title: 'Publier un trajet',
+        subtitle: 'Proposez un nouveau trajet aux étudiants.',
+        icon: Icons.add_circle_outline_rounded,
+      ),
+      const PlaceholderPage(
+        title: 'Mes trajets',
+        subtitle: 'Gérez vos trajets publiés.',
+        icon: Icons.directions_car_outlined,
+      ),
+      const PlaceholderPage(
+        title: 'Messages',
+        subtitle: 'Discutez avec vos passagers.',
+        icon: Icons.chat_bubble_outline_rounded,
+      ),
+      DriverProfileScreen(user: widget.user),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: pages,
       ),
 
       bottomNavigationBar: NavigationBar(

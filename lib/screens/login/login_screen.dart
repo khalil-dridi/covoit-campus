@@ -322,7 +322,7 @@ class _LoginScreenState extends State<LoginScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (context) => const DriverShell(),
+        builder: (context) => DriverShell(user: user),
       ),
       (route) => false,
     );
