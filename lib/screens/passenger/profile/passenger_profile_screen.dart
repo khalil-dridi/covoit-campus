@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/user.dart';
 import '../../../repositories/user_repository.dart';
+import '../../login/login_screen.dart';
 
 class PassengerProfileScreen extends StatefulWidget {
   final User user;
@@ -1048,9 +1049,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       cancelText: 'Annuler',
       confirmText: 'Continuer',
       onConfirm: () {
-        setState(() {
-          driverMode = true;
-        });
+        _updateRoleAndRequireLogout(context, 'driver');
       },
     );
   }
@@ -1073,9 +1072,153 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       cancelText: 'Annuler',
       confirmText: 'Continuer',
       onConfirm: () {
-        setState(() {
-          driverMode = false;
-        });
+        _updateRoleAndRequireLogout(context, 'passenger');
+      },
+    );
+  }
+
+  Future<void> _updateRoleAndRequireLogout(
+    BuildContext context,
+    String role,
+  ) async {
+    final userId = widget.user.id;
+    if (userId == null) {
+      _showRoleUpdateError(context);
+      return;
+    }
+
+    try {
+      final updatedRows = await UserRepository().updateUserRole(userId, role);
+      if (!mounted || !context.mounted) {
+        return;
+      }
+      if (updatedRows == 0) {
+        _showRoleUpdateError(context);
+        return;
+      }
+
+      setState(() {
+        driverMode = role == 'driver';
+      });
+      _showForcedLogoutDialog(context);
+    } catch (_) {
+      if (!mounted || !context.mounted) {
+        return;
+      }
+      _showRoleUpdateError(context);
+    }
+  }
+
+  void _showRoleUpdateError(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Impossible de modifier votre rôle. Veuillez réessayer.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showForcedLogoutDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: secondaryBlue.withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.logout_rounded,
+                      color: secondaryBlue,
+                      size: 31,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Déconnexion requise',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: primaryBlue,
+                      fontSize: 21,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Votre rôle a été modifié avec succès. Pour appliquer '
+                    'votre nouvel espace utilisateur, vous devez vous '
+                    'déconnecter puis vous reconnecter.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: textGrey.withValues(alpha: 0.82),
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final navigator = Navigator.of(dialogContext);
+                        navigator.pop();
+                        navigator.pushAndRemoveUntil<void>(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const LoginScreen(),
+                          ),
+                          (route) => false,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryBlue,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                      ),
+                      child: const Text(
+                        'Se déconnecter',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
       },
     );
   }

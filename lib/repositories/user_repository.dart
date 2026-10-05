@@ -91,4 +91,18 @@ class UserRepository {
       whereArgs: [userId],
     );
   }
+
+  Future<int> updateUserRole(int userId, String role) async {
+    final db = await _databaseHelper.database;
+
+    return await db.update(
+      'users',
+      {
+        'role': role,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
 }
