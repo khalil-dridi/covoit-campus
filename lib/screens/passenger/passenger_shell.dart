@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
+import 'home/passenger_home_screen.dart';
 import 'profile/passenger_profile_screen.dart';
 
 class PassengerShell extends StatefulWidget {
@@ -22,12 +23,7 @@ class _PassengerShellState extends State<PassengerShell> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
-      const PlaceholderPage(
-        title: 'Accueil',
-        subtitle:
-            'Retrouvez vos trajets et recommandations.',
-        icon: Icons.home_rounded,
-      ),
+      PassengerHomeScreen(user: widget.user),
 
       const PlaceholderPage(
         title: 'Rechercher',
