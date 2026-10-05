@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
 import 'profile/passenger_profile_screen.dart';
 
 class PassengerShell extends StatefulWidget {
-  const PassengerShell({super.key});
+  final User user;
+
+  const PassengerShell({
+    super.key,
+    required this.user,
+  });
 
   @override
   State<PassengerShell> createState() => _PassengerShellState();
@@ -13,40 +19,44 @@ class PassengerShell extends StatefulWidget {
 class _PassengerShellState extends State<PassengerShell> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    PlaceholderPage(
-      title: 'Accueil',
-      subtitle: 'Retrouvez vos trajets et recommandations.',
-      icon: Icons.home_rounded,
-    ),
-
-    PlaceholderPage(
-      title: 'Rechercher',
-      subtitle: 'Trouvez un trajet qui vous correspond.',
-      icon: Icons.search_rounded,
-    ),
-
-    PlaceholderPage(
-      title: 'Réservations',
-      subtitle: 'Gérez vos réservations et vos trajets à venir.',
-      icon: Icons.confirmation_number_outlined,
-    ),
-
-    PlaceholderPage(
-      title: 'Messages',
-      subtitle: 'Discutez avec les autres étudiants.',
-      icon: Icons.chat_bubble_outline_rounded,
-    ),
-
-    PassengerProfileScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      const PlaceholderPage(
+        title: 'Accueil',
+        subtitle:
+            'Retrouvez vos trajets et recommandations.',
+        icon: Icons.home_rounded,
+      ),
+
+      const PlaceholderPage(
+        title: 'Rechercher',
+        subtitle:
+            'Trouvez un trajet qui vous correspond.',
+        icon: Icons.search_rounded,
+      ),
+
+      const PlaceholderPage(
+        title: 'Réservations',
+        subtitle:
+            'Gérez vos réservations et vos trajets à venir.',
+        icon: Icons.confirmation_number_outlined,
+      ),
+
+      const PlaceholderPage(
+        title: 'Messages',
+        subtitle:
+            'Discutez avec les autres étudiants.',
+        icon: Icons.chat_bubble_outline_rounded,
+      ),
+
+      const PassengerProfileScreen(),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: pages,
       ),
 
       bottomNavigationBar: NavigationBar(
@@ -72,7 +82,9 @@ class _PassengerShellState extends State<PassengerShell> {
           ),
 
           NavigationDestination(
-            icon: Icon(Icons.confirmation_number_outlined),
+            icon: Icon(
+              Icons.confirmation_number_outlined,
+            ),
             selectedIcon: Icon(
               Icons.confirmation_number_rounded,
             ),

@@ -312,7 +312,9 @@ class _LoginScreenState extends State<LoginScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (context) => const PassengerShell(),
+        builder: (context) => PassengerShell(
+  user: user,
+),
       ),
       (route) => false,
     );
