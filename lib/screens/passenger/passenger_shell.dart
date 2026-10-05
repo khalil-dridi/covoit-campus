@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../shared/placeholder_page.dart';
+import 'profile/passenger_profile_screen.dart';
 
 class PassengerShell extends StatefulWidget {
   const PassengerShell({super.key});
@@ -18,26 +19,26 @@ class _PassengerShellState extends State<PassengerShell> {
       subtitle: 'Retrouvez vos trajets et recommandations.',
       icon: Icons.home_rounded,
     ),
+
     PlaceholderPage(
       title: 'Rechercher',
       subtitle: 'Trouvez un trajet qui vous correspond.',
       icon: Icons.search_rounded,
     ),
+
     PlaceholderPage(
       title: 'Réservations',
       subtitle: 'Gérez vos réservations et vos trajets à venir.',
       icon: Icons.confirmation_number_outlined,
     ),
+
     PlaceholderPage(
       title: 'Messages',
       subtitle: 'Discutez avec les autres étudiants.',
       icon: Icons.chat_bubble_outline_rounded,
     ),
-    PlaceholderPage(
-      title: 'Profil',
-      subtitle: 'Gérez vos informations et préférences.',
-      icon: Icons.person_outline_rounded,
-    ),
+
+    PassengerProfileScreen(),
   ];
 
   @override
@@ -63,21 +64,31 @@ class _PassengerShellState extends State<PassengerShell> {
             selectedIcon: Icon(Icons.home_rounded),
             label: 'Accueil',
           ),
+
           NavigationDestination(
             icon: Icon(Icons.search_outlined),
             selectedIcon: Icon(Icons.search_rounded),
             label: 'Rechercher',
           ),
+
           NavigationDestination(
             icon: Icon(Icons.confirmation_number_outlined),
-            selectedIcon: Icon(Icons.confirmation_number_rounded),
+            selectedIcon: Icon(
+              Icons.confirmation_number_rounded,
+            ),
             label: 'Réservations',
           ),
+
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded),
-            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            icon: Icon(
+              Icons.chat_bubble_outline_rounded,
+            ),
+            selectedIcon: Icon(
+              Icons.chat_bubble_rounded,
+            ),
             label: 'Messages',
           ),
+
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
             selectedIcon: Icon(Icons.person_rounded),
