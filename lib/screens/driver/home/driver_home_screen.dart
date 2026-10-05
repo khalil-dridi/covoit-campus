@@ -21,10 +21,10 @@ class DriverHomeScreen extends StatefulWidget {
   });
 
   @override
-  State<DriverHomeScreen> createState() => _DriverHomeScreenState();
+  DriverHomeScreenState createState() => DriverHomeScreenState();
 }
 
-class _DriverHomeScreenState extends State<DriverHomeScreen> {
+class DriverHomeScreenState extends State<DriverHomeScreen> {
   static const Color primaryBlue = Color(0xFF123D68);
   static const Color secondaryBlue = Color(0xFF1E5AA8);
   static const Color green = Color(0xFF20B978);
@@ -76,6 +76,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       });
     }
   }
+
+  Future<void> refresh() => _loadData();
 
   @override
   Widget build(BuildContext context) {

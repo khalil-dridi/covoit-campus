@@ -4,6 +4,7 @@ import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
 import 'home/driver_home_screen.dart';
 import 'profile/driver_profile_screen.dart';
+import 'publish/driver_publish_trip_screen.dart';
 
 class DriverShell extends StatefulWidget {
   final User user;
@@ -19,20 +20,24 @@ class DriverShell extends StatefulWidget {
 
 class _DriverShellState extends State<DriverShell> {
   int _currentIndex = 0;
+  final GlobalKey<DriverHomeScreenState> _homeKey =
+      GlobalKey<DriverHomeScreenState>();
 
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
       DriverHomeScreen(
+        key: _homeKey,
         user: widget.user,
         onPublishTap: () => setState(() => _currentIndex = 1),
         onTripsTap: () => setState(() => _currentIndex = 2),
         onProfileTap: () => setState(() => _currentIndex = 4),
       ),
-      const PlaceholderPage(
-        title: 'Publier un trajet',
-        subtitle: 'Proposez un nouveau trajet aux étudiants.',
-        icon: Icons.add_circle_outline_rounded,
+      DriverPublishTripScreen(
+        user: widget.user,
+        onTripPublished: () => _homeKey.currentState?.refresh(),
+        onViewTripsTap: () => setState(() => _currentIndex = 2),
+        onAddVehicleTap: () => setState(() => _currentIndex = 4),
       ),
       const PlaceholderPage(
         title: 'Mes trajets',
@@ -92,4 +97,5 @@ class _DriverShellState extends State<DriverShell> {
       ),
     );
   }
+
 }       

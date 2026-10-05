@@ -17,6 +17,17 @@ class VehicleRepository {
     return rows.isEmpty ? null : Vehicle.fromMap(rows.first);
   }
 
+  Future<List<Vehicle>> getVehiclesForUser(int userId) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.query(
+      'vehicles',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'id DESC',
+    );
+    return rows.map(Vehicle.fromMap).toList(growable: false);
+  }
+
   Future<int> createVehicle(Vehicle vehicle) async {
     final db = await _databaseHelper.database;
     return db.insert('vehicles', vehicle.toMap());

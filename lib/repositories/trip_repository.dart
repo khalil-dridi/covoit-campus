@@ -1,5 +1,6 @@
 import '../database/database_helper.dart';
 import '../models/trip.dart';
+import 'package:sqflite/sqflite.dart';
 
 enum TripSort { earliest, cheapest, bestRated }
 
@@ -57,8 +58,16 @@ class TripRepository {
         trips.destination,
         trips.departure_date,
         trips.departure_time,
+        trips.driver_id,
+        trips.vehicle_id,
+        trips.total_seats,
         trips.available_seats,
         trips.price,
+        trips.meeting_point,
+        trips.description,
+        trips.status,
+        trips.created_at,
+        trips.updated_at,
         drivers.full_name AS driver_name,
         drivers.is_verified AS driver_is_verified,
         drivers.profile_image AS driver_profile_image,
@@ -80,6 +89,40 @@ class TripRepository {
           return flexibleTime ? difference.abs() <= 60 : difference >= 0;
         })
         .toList(growable: false);
+  }
+
+  Future<int> createTrip(Trip trip) async {
+    final db = await _databaseHelper.database;
+
+    return db.transaction<int>((transaction) async {
+      final drivers = await transaction.query(
+        'users',
+        columns: ['id'],
+        where: "id = ? AND role = 'driver' AND is_active = 1",
+        whereArgs: [trip.driverId],
+        limit: 1,
+      );
+      if (drivers.isEmpty) {
+        throw StateError('The authenticated user is not an active driver.');
+      }
+
+      final vehicles = await transaction.query(
+        'vehicles',
+        columns: ['id'],
+        where: 'id = ? AND user_id = ?',
+        whereArgs: [trip.vehicleId, trip.driverId],
+        limit: 1,
+      );
+      if (vehicles.isEmpty) {
+        throw StateError('The selected vehicle does not belong to driver.');
+      }
+
+      return transaction.insert(
+        'trips',
+        trip.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+    });
   }
 
   int _minutesFromTime(String value) {

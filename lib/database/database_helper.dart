@@ -26,7 +26,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
 
       onConfigure: (db) async {
         await db.execute(
@@ -126,6 +126,7 @@ class DatabaseHelper {
         total_seats INTEGER NOT NULL,
         available_seats INTEGER NOT NULL,
         price REAL NOT NULL DEFAULT 0,
+        meeting_point TEXT NOT NULL DEFAULT '',
         description TEXT,
         status TEXT NOT NULL DEFAULT 'available',
         created_at TEXT NOT NULL,
@@ -315,6 +316,18 @@ class DatabaseHelper {
   ) async {
     if (oldVersion < 2) {
       await _createDefaultAdmin(db);
+    }
+
+    if (oldVersion < 3) {
+      final columns = await db.rawQuery('PRAGMA table_info(trips)');
+      final hasMeetingPoint = columns.any(
+        (column) => column['name'] == 'meeting_point',
+      );
+      if (!hasMeetingPoint) {
+        await db.execute(
+          "ALTER TABLE trips ADD COLUMN meeting_point TEXT NOT NULL DEFAULT ''",
+        );
+      }
     }
   }
 
