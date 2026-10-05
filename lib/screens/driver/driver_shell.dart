@@ -22,6 +22,8 @@ class _DriverShellState extends State<DriverShell> {
   int _currentIndex = 0;
   final GlobalKey<DriverHomeScreenState> _homeKey =
       GlobalKey<DriverHomeScreenState>();
+  final GlobalKey<DriverPublishTripScreenState> _publishKey =
+      GlobalKey<DriverPublishTripScreenState>();
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +36,7 @@ class _DriverShellState extends State<DriverShell> {
         onProfileTap: () => setState(() => _currentIndex = 4),
       ),
       DriverPublishTripScreen(
+        key: _publishKey,
         user: widget.user,
         onTripPublished: () => _homeKey.currentState?.refresh(),
         onViewTripsTap: () => setState(() => _currentIndex = 2),
@@ -65,6 +68,9 @@ class _DriverShellState extends State<DriverShell> {
           setState(() {
             _currentIndex = index;
           });
+          if (index == 1) {
+            _publishKey.currentState?.reloadVehicles();
+          }
         },
 
         destinations: const [

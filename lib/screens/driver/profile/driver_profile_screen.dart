@@ -597,9 +597,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       return;
     }
 
+    late final Vehicle savedVehicle;
     try {
       if (vehicle == null) {
-        await _vehicleRepository.createVehicle(
+        final vehicleId = await _vehicleRepository.createVehicle(
           Vehicle(
             userId: userId,
             brand: result.brand,
@@ -609,8 +610,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             seats: result.seats,
           ),
         );
+        if (vehicleId <= 0) {
+          throw StateError('SQLite did not return a valid vehicle ID.');
+        }
+        savedVehicle = Vehicle(
+          id: vehicleId,
+          userId: userId,
+          brand: result.brand,
+          model: result.model,
+          color: result.color,
+          licensePlate: result.licensePlate,
+          seats: result.seats,
+          createdAt: DateTime.now().toIso8601String(),
+        );
       } else {
-        await _vehicleRepository.updateVehicle(
+        final updatedRows = await _vehicleRepository.updateVehicle(
           Vehicle(
             id: vehicle.id,
             userId: userId,
@@ -621,13 +635,36 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             seats: result.seats,
           ),
         );
+        if (updatedRows == 0) {
+          throw StateError('No vehicle row was updated.');
+        }
+        savedVehicle = Vehicle(
+          id: vehicle.id,
+          userId: userId,
+          brand: result.brand,
+          model: result.model,
+          color: result.color,
+          licensePlate: result.licensePlate,
+          seats: result.seats,
+          createdAt: vehicle.createdAt,
+        );
       }
-      if (!mounted) return;
-      await _refreshVehicle();
-      if (mounted) _showMessage('Véhicule enregistré.');
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('VEHICLE PROFILE SAVE ERROR: $error');
+      debugPrint('$stackTrace');
       if (mounted) _showMessage('Impossible d’enregistrer le véhicule.');
+      return;
     }
+
+    if (!mounted) return;
+    setState(() => _vehicle = savedVehicle);
+    try {
+      await _refreshVehicle();
+    } catch (error, stackTrace) {
+      debugPrint('VEHICLE PROFILE REFRESH ERROR: $error');
+      debugPrint('$stackTrace');
+    }
+    if (mounted) _showMessage('Véhicule enregistré.');
   }
 
   Future<void> _confirmDeleteVehicle(Vehicle vehicle) async {

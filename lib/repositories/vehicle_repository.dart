@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../database/database_helper.dart';
 import '../models/vehicle.dart';
 
@@ -30,14 +32,26 @@ class VehicleRepository {
 
   Future<int> createVehicle(Vehicle vehicle) async {
     final db = await _databaseHelper.database;
-    return db.insert('vehicles', vehicle.toMap());
+    try {
+      final vehicleId = await db.insert('vehicles', vehicle.toMap());
+      if (vehicleId <= 0) {
+        throw StateError('SQLite returned an invalid vehicle ID.');
+      }
+      return vehicleId;
+    } catch (error, stackTrace) {
+      debugPrint('VEHICLE INSERT ERROR: $error');
+      debugPrint('$stackTrace');
+      rethrow;
+    }
   }
 
   Future<int> updateVehicle(Vehicle vehicle) async {
     final db = await _databaseHelper.database;
     return db.update(
       'vehicles',
-      vehicle.toMap()..remove('user_id'),
+      vehicle.toMap()
+        ..remove('user_id')
+        ..remove('created_at'),
       where: 'id = ? AND user_id = ?',
       whereArgs: [vehicle.id, vehicle.userId],
     );

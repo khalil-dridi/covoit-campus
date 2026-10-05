@@ -22,11 +22,11 @@ class DriverPublishTripScreen extends StatefulWidget {
   });
 
   @override
-  State<DriverPublishTripScreen> createState() =>
-      _DriverPublishTripScreenState();
+  DriverPublishTripScreenState createState() =>
+      DriverPublishTripScreenState();
 }
 
-class _DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
+class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
   static const Color primaryBlue = Color(0xFF123D68);
   static const Color secondaryBlue = Color(0xFF1E5AA8);
   static const Color green = Color(0xFF20B978);
@@ -97,9 +97,11 @@ class _DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
       if (!mounted) return;
       setState(() {
         _vehicles = vehicles;
-        if (_selectedVehicle == null && vehicles.isNotEmpty) {
-          _selectedVehicle = vehicles.first;
-        }
+        _selectedVehicle = vehicles.where(
+          (vehicle) => vehicle.id == _selectedVehicle?.id,
+        ).firstOrNull;
+        _selectedVehicle ??= vehicles.firstOrNull;
+        _availableSeats = _availableSeats.clamp(1, _seatLimit);
         _isLoadingVehicles = false;
       });
     } catch (_) {
@@ -107,6 +109,12 @@ class _DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
       setState(() => _isLoadingVehicles = false);
       _showMessage('Impossible de charger vos véhicules.');
     }
+  }
+
+  Future<void> reloadVehicles() async {
+    if (!mounted) return;
+    setState(() => _isLoadingVehicles = true);
+    await _loadVehicles();
   }
 
   @override
