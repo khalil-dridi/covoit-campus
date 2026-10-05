@@ -66,4 +66,29 @@ class UserRepository {
       whereArgs: [userId],
     );
   }
+
+  Future<int> updateUserProfile({
+    required int userId,
+    required String fullName,
+    String? phone,
+    String? university,
+  }) async {
+    final db = await _databaseHelper.database;
+
+    return await db.update(
+      'users',
+      {
+        'full_name': fullName.trim(),
+        'phone': phone?.trim().isNotEmpty == true
+            ? phone!.trim()
+            : null,
+        'university': university?.trim().isNotEmpty == true
+            ? university!.trim()
+            : null,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
 }

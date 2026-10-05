@@ -50,7 +50,7 @@ class _PassengerShellState extends State<PassengerShell> {
         icon: Icons.chat_bubble_outline_rounded,
       ),
 
-      const PassengerProfileScreen(),
+      PassengerProfileScreen(user: widget.user),
     ];
 
     return Scaffold(

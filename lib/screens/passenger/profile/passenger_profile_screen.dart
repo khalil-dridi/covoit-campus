@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 
+import '../../../models/user.dart';
+import '../../../repositories/user_repository.dart';
+
 class PassengerProfileScreen extends StatefulWidget {
-  const PassengerProfileScreen({super.key});
+  final User user;
+
+  const PassengerProfileScreen({
+    super.key,
+    required this.user,
+  });
 
   @override
   State<PassengerProfileScreen> createState() =>
       _PassengerProfileScreenState();
 }
 
-class _PassengerProfileScreenState
-    extends State<PassengerProfileScreen> {
+class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
   // ==========================================================
   // COLORS
   // ==========================================================
@@ -33,7 +40,24 @@ class _PassengerProfileScreenState
   bool musicPreference = true;
   bool petsPreference = false;
 
-  bool driverMode = false;
+  late bool driverMode;
+  late String _fullName;
+  late String _phone;
+  late String _university;
+
+  // ==========================================================
+  // INIT
+  // ==========================================================
+
+  @override
+  void initState() {
+    super.initState();
+
+    driverMode = widget.user.role == 'driver';
+    _fullName = widget.user.fullName;
+    _phone = widget.user.phone ?? '';
+    _university = widget.user.university ?? '';
+  }
 
   // ==========================================================
   // BUILD
@@ -101,7 +125,7 @@ class _PassengerProfileScreenState
         _buildHeaderButton(
           icon: Icons.arrow_back_rounded,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context).maybePop();
           },
         ),
 
@@ -140,6 +164,8 @@ class _PassengerProfileScreenState
   // ==========================================================
 
   Widget _buildProfileHeader(BuildContext context) {
+    final bool isVerified = widget.user.isVerified;
+
     return Center(
       child: Column(
         children: [
@@ -211,9 +237,12 @@ class _PassengerProfileScreenState
 
           const SizedBox(height: 16),
 
-          const Text(
-            'Khalil Dridi',
-            style: TextStyle(
+          Text(
+            _fullName,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
               color: primaryBlue,
               fontSize: 27,
               fontWeight: FontWeight.w800,
@@ -229,22 +258,28 @@ class _PassengerProfileScreenState
               vertical: 8,
             ),
             decoration: BoxDecoration(
-              color: green.withValues(alpha: 0.10),
+              color: isVerified
+                  ? green.withValues(alpha: 0.10)
+                  : Colors.red.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(30),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.check_circle_rounded,
-                  color: green,
+                  isVerified
+                      ? Icons.check_circle_rounded
+                      : Icons.error_outline_rounded,
+                  color: isVerified ? green : Colors.red,
                   size: 18,
                 ),
-                SizedBox(width: 6),
+                const SizedBox(width: 6),
                 Text(
-                  'Email vérifié',
+                  isVerified
+                      ? 'Email vérifié'
+                      : 'Email non vérifié',
                   style: TextStyle(
-                    color: green,
+                    color: isVerified ? green : Colors.red,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
@@ -389,6 +424,8 @@ class _PassengerProfileScreenState
   // ==========================================================
 
   Widget _buildPersonalInformation(BuildContext context) {
+    final bool isVerified = widget.user.isVerified;
+
     return _buildLargeSectionCard(
       title: 'Informations personnelles',
       icon: Icons.person_rounded,
@@ -399,7 +436,7 @@ class _PassengerProfileScreenState
         _buildInformationRow(
           icon: Icons.person_outline_rounded,
           label: 'Nom complet',
-          value: 'Khalil Dridi',
+          value: _fullName,
           onTap: () {
             _showEditPersonalInfoDialog(context);
           },
@@ -410,10 +447,12 @@ class _PassengerProfileScreenState
         _buildInformationRow(
           icon: Icons.email_outlined,
           label: 'Email',
-          value: 'dridi1@esprit.tn',
-          trailing: const Icon(
-            Icons.check_circle_rounded,
-            color: green,
+          value: widget.user.email,
+          trailing: Icon(
+            isVerified
+                ? Icons.check_circle_rounded
+                : Icons.error_outline_rounded,
+            color: isVerified ? green : Colors.red,
             size: 19,
           ),
         ),
@@ -423,9 +462,11 @@ class _PassengerProfileScreenState
         _buildInformationRow(
           icon: Icons.phone_outlined,
           label: 'Téléphone',
-          value: '+216 29 553 824',
+          value: _phone.trim().isNotEmpty
+              ? _phone
+              : 'Non renseigné',
           onTap: () {
-            _showEditPhoneDialog(context);
+            _showEditPersonalInfoDialog(context);
           },
         ),
 
@@ -434,9 +475,11 @@ class _PassengerProfileScreenState
         _buildInformationRow(
           icon: Icons.school_outlined,
           label: 'Université',
-          value: 'ESPRIT',
+          value: _university.trim().isNotEmpty
+              ? _university
+              : 'Non renseignée',
           onTap: () {
-            _showEditUniversityDialog(context);
+            _showEditPersonalInfoDialog(context);
           },
         ),
       ],
@@ -456,8 +499,8 @@ class _PassengerProfileScreenState
           context,
           title: 'Préférences',
           message:
-              'Vous pouvez modifier vos préférences '
-              'directement depuis cette section.',
+              'Vous pourrez bientôt modifier vos villes, '
+              'horaires et préférences de trajet.',
           icon: Icons.tune_rounded,
         );
       },
@@ -615,7 +658,7 @@ class _PassengerProfileScreenState
           Container(
             width: 38,
             height: 38,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: lightBlue,
               shape: BoxShape.circle,
             ),
@@ -748,23 +791,29 @@ class _PassengerProfileScreenState
 
           const SizedBox(width: 12),
 
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Passer en mode conducteur',
-                  style: TextStyle(
+                  driverMode
+                      ? 'Mode conducteur actif'
+                      : 'Passer en mode conducteur',
+                  style: const TextStyle(
                     color: primaryBlue,
                     fontSize: 13.5,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                SizedBox(height: 4),
+
+                const SizedBox(height: 4),
+
                 Text(
-                  'Proposez vos trajets et aidez '
-                  'd’autres étudiants.',
-                  style: TextStyle(
+                  driverMode
+                      ? 'Publiez et gérez vos propres trajets.'
+                      : 'Proposez vos trajets et aidez '
+                          'd’autres étudiants.',
+                  style: const TextStyle(
                     color: textGrey,
                     fontSize: 10.5,
                     height: 1.35,
@@ -775,16 +824,16 @@ class _PassengerProfileScreenState
           ),
 
           Switch(
-  value: driverMode,
-  activeThumbColor: green,
-  onChanged: (value) {
-    if (value) {
-      _showDriverModeDialog(context);
-    } else {
-      _showDisableDriverModeDialog(context);
-    }
-  },
-),
+            value: driverMode,
+            activeThumbColor: green,
+            onChanged: (value) {
+              if (value) {
+                _showDriverModeDialog(context);
+              } else {
+                _showDisableDriverModeDialog(context);
+              }
+            },
+          ),
         ],
       ),
     );
@@ -999,8 +1048,6 @@ class _PassengerProfileScreenState
       cancelText: 'Annuler',
       confirmText: 'Continuer',
       onConfirm: () {
-        Navigator.pop(context);
-
         setState(() {
           driverMode = true;
         });
@@ -1026,8 +1073,6 @@ class _PassengerProfileScreenState
       cancelText: 'Annuler',
       confirmText: 'Continuer',
       onConfirm: () {
-        Navigator.pop(context);
-
         setState(() {
           driverMode = false;
         });
@@ -1051,8 +1096,6 @@ class _PassengerProfileScreenState
       cancelText: 'Rester connecté',
       confirmText: 'Se déconnecter',
       onConfirm: () {
-        Navigator.pop(context);
-
         _showInfoDialog(
           context,
           title: 'Déconnexion',
@@ -1083,8 +1126,6 @@ class _PassengerProfileScreenState
       cancelText: 'Annuler',
       confirmText: 'Supprimer',
       onConfirm: () {
-        Navigator.pop(context);
-
         _showInfoDialog(
           context,
           title: 'Suppression du compte',
@@ -1104,37 +1145,26 @@ class _PassengerProfileScreenState
   void _showEditPersonalInfoDialog(
     BuildContext context,
   ) {
-    _showInfoDialog(
-      context,
-      title: 'Modifier mes informations',
-      message:
-          'Cette fenêtre permettra de modifier votre nom, '
-          'téléphone et université.',
-      icon: Icons.edit_outlined,
-    );
-  }
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => _EditPersonalInfoDialog(
+        userId: widget.user.id,
+        fullName: _fullName,
+        phone: _phone,
+        university: _university,
+        onSaved: (fullName, phone, university) {
+          if (!mounted) {
+            return;
+          }
 
-  void _showEditPhoneDialog(BuildContext context) {
-    _showInfoDialog(
-      context,
-      title: 'Modifier le téléphone',
-      message:
-          'Le formulaire de modification du numéro sera '
-          'connecté à SQLite prochainement.',
-      icon: Icons.phone_outlined,
-    );
-  }
-
-  void _showEditUniversityDialog(
-    BuildContext context,
-  ) {
-    _showInfoDialog(
-      context,
-      title: 'Modifier l’université',
-      message:
-          'Vous pourrez sélectionner votre établissement '
-          'universitaire ici.',
-      icon: Icons.school_outlined,
+          setState(() {
+            _fullName = fullName;
+            _phone = phone;
+            _university = university;
+          });
+        },
+      ),
     );
   }
 
@@ -1227,7 +1257,7 @@ class _PassengerProfileScreenState
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () {
-                          Navigator.pop(dialogContext);
+                          Navigator.of(dialogContext).pop();
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: textGrey,
@@ -1257,7 +1287,10 @@ class _PassengerProfileScreenState
 
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: onConfirm,
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          onConfirm();
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: iconColor,
                           foregroundColor: Colors.white,
@@ -1319,7 +1352,7 @@ class _PassengerProfileScreenState
                 Container(
                   width: 66,
                   height: 66,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: lightBlue,
                     shape: BoxShape.circle,
                   ),
@@ -1361,7 +1394,7 @@ class _PassengerProfileScreenState
                   height: 48,
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.pop(dialogContext);
+                      Navigator.of(dialogContext).pop();
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryBlue,
@@ -1386,6 +1419,334 @@ class _PassengerProfileScreenState
           ),
         );
       },
+    );
+  }
+}
+
+class _EditPersonalInfoDialog extends StatefulWidget {
+  final int? userId;
+  final String fullName;
+  final String phone;
+  final String university;
+  final void Function(String fullName, String phone, String university)
+      onSaved;
+
+  const _EditPersonalInfoDialog({
+    required this.userId,
+    required this.fullName,
+    required this.phone,
+    required this.university,
+    required this.onSaved,
+  });
+
+  @override
+  State<_EditPersonalInfoDialog> createState() =>
+      _EditPersonalInfoDialogState();
+}
+
+class _EditPersonalInfoDialogState extends State<_EditPersonalInfoDialog> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  late final TextEditingController _fullNameController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _universityController;
+
+  bool _isSaving = false;
+  String? _saveError;
+
+  @override
+  void initState() {
+    super.initState();
+    _fullNameController = TextEditingController(text: widget.fullName);
+    _phoneController = TextEditingController(text: widget.phone);
+    _universityController = TextEditingController(text: widget.university);
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _phoneController.dispose();
+    _universityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(BuildContext dialogContext) async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final userId = widget.userId;
+    if (userId == null) {
+      setState(() {
+        _saveError = 'Impossible d’identifier votre compte.';
+      });
+      return;
+    }
+
+    final fullName = _fullNameController.text.trim();
+    final phone = _phoneController.text.trim();
+    final university = _universityController.text.trim();
+
+    setState(() {
+      _isSaving = true;
+      _saveError = null;
+    });
+
+    try {
+      final updatedRows = await UserRepository().updateUserProfile(
+        userId: userId,
+        fullName: fullName,
+        phone: phone,
+        university: university,
+      );
+
+      if (!mounted) {
+        return;
+      }
+      if (updatedRows == 0) {
+        throw StateError('No user row was updated.');
+      }
+
+      widget.onSaved(fullName, phone, university);
+
+      if (!mounted || !dialogContext.mounted) {
+        return;
+      }
+      Navigator.of(dialogContext).pop();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isSaving = false;
+        _saveError =
+            'Impossible d’enregistrer vos informations. Veuillez réessayer.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Builder(
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SingleChildScrollView(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      width: 66,
+                      height: 66,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: _PassengerProfileScreenState.lightBlue,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.edit_outlined,
+                        color: _PassengerProfileScreenState.secondaryBlue,
+                        size: 29,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Modifier mes informations',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: _PassengerProfileScreenState.primaryBlue,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildEditField(
+                      label: 'Nom complet',
+                      icon: Icons.person_outline_rounded,
+                      controller: _fullNameController,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Le nom complet est obligatoire.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildEditField(
+                      label: 'Téléphone',
+                      icon: Icons.phone_outlined,
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildEditField(
+                      label: 'Université',
+                      icon: Icons.school_outlined,
+                      controller: _universityController,
+                    ),
+                    if (_saveError != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _saveError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _isSaving
+                                ? null
+                                : () => Navigator.of(dialogContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor:
+                                  _PassengerProfileScreenState.textGrey,
+                              side: const BorderSide(
+                                color: Color(0xFFD8E6E1),
+                                width: 1.3,
+                              ),
+                              minimumSize: const Size.fromHeight(48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: const Text(
+                              'Annuler',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isSaving
+                                ? null
+                                : () => _save(dialogContext),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  _PassengerProfileScreenState.primaryBlue,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor:
+                                  _PassengerProfileScreenState.secondaryBlue,
+                              elevation: 0,
+                              minimumSize: const Size.fromHeight(48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: _isSaving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Enregistrer',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEditField({
+    required String label,
+    required IconData icon,
+    required TextEditingController controller,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      validator: validator,
+      textCapitalization: TextCapitalization.words,
+      style: const TextStyle(
+        color: _PassengerProfileScreenState.primaryBlue,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(
+          icon,
+          color: _PassengerProfileScreenState.secondaryBlue,
+          size: 20,
+        ),
+        filled: true,
+        fillColor:
+            _PassengerProfileScreenState.lightBlue.withValues(alpha: 0.45),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Color(0xFFD8E6E1)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Color(0xFFD8E6E1)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(
+            color: _PassengerProfileScreenState.secondaryBlue,
+            width: 1.4,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.red),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.red, width: 1.4),
+        ),
+      ),
     );
   }
 }
