@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
 import 'dashboard/admin_dashboard_screen.dart';
+import 'users/admin_users_screen.dart';
 
 class AdminShell extends StatefulWidget {
   final User user;
@@ -23,11 +24,7 @@ class _AdminShellState extends State<AdminShell> {
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       AdminDashboardScreen(admin: widget.user),
-      const PlaceholderPage(
-        title: 'Utilisateurs',
-        subtitle: 'Gérez les utilisateurs de Covoit Campus.',
-        icon: Icons.people_outline_rounded,
-      ),
+      AdminUsersScreen(admin: widget.user),
       const PlaceholderPage(
         title: 'Trajets',
         subtitle: 'Gérez les trajets de la plateforme.',

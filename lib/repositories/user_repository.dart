@@ -105,4 +105,119 @@ class UserRepository {
       whereArgs: [userId],
     );
   }
+
+  Future<List<User>> getAllUsers() async {
+    final db = await _databaseHelper.database;
+
+    final result = await db.query(
+      'users',
+      orderBy: 'created_at DESC, id DESC',
+    );
+
+    return result.map(User.fromMap).toList(growable: false);
+  }
+
+  Future<int> setUserActiveStatus(
+    int userId,
+    bool isActive, {
+    int? adminId,
+  }) async {
+    if (adminId != null && userId == adminId && !isActive) {
+      throw StateError(
+        'Un administrateur ne peut pas désactiver son propre compte.',
+      );
+    }
+
+    final db = await _databaseHelper.database;
+
+    return await db.update(
+      'users',
+      {
+        'is_active': isActive ? 1 : 0,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  Future<AdminUserStats> getAdminUserStats() async {
+    final db = await _databaseHelper.database;
+
+    final results = await Future.wait<int>([
+      _count(db, 'SELECT COUNT(*) FROM users'),
+      _count(db, "SELECT COUNT(*) FROM users WHERE role = 'passenger'"),
+      _count(db, "SELECT COUNT(*) FROM users WHERE role = 'driver'"),
+      _count(db, 'SELECT COUNT(*) FROM users WHERE is_active = 1'),
+      _count(db, 'SELECT COUNT(*) FROM users WHERE is_verified = 0'),
+    ]);
+
+    return AdminUserStats(
+      totalUsers: results[0],
+      passengerCount: results[1],
+      driverCount: results[2],
+      activeCount: results[3],
+      unverifiedCount: results[4],
+    );
+  }
+
+  Future<Map<String, int>> getUserActivityCounts(int userId) async {
+    final db = await _databaseHelper.database;
+
+    final results = await Future.wait<int>([
+      _countWithArgs(
+        db,
+        'SELECT COUNT(*) FROM vehicles WHERE user_id = ?',
+        [userId],
+      ),
+      _countWithArgs(
+        db,
+        'SELECT COUNT(*) FROM trips WHERE driver_id = ?',
+        [userId],
+      ),
+      _countWithArgs(
+        db,
+        'SELECT COUNT(*) FROM bookings WHERE passenger_id = ?',
+        [userId],
+      ),
+    ]);
+
+    return {
+      'vehicles': results[0],
+      'trips': results[1],
+      'bookings': results[2],
+    };
+  }
+
+  Future<int> _count(Database db, String sql) async {
+    final rows = await db.rawQuery(sql);
+    final value = rows.first.values.first;
+    return value == null ? 0 : (value as int);
+  }
+
+  Future<int> _countWithArgs(
+    Database db,
+    String sql,
+    List<Object?> args,
+  ) async {
+    final rows = await db.rawQuery(sql, args);
+    final value = rows.first.values.first;
+    return value == null ? 0 : (value as int);
+  }
+}
+
+class AdminUserStats {
+  final int totalUsers;
+  final int passengerCount;
+  final int driverCount;
+  final int activeCount;
+  final int unverifiedCount;
+
+  const AdminUserStats({
+    required this.totalUsers,
+    required this.passengerCount,
+    required this.driverCount,
+    required this.activeCount,
+    required this.unverifiedCount,
+  });
 }

@@ -60,4 +60,34 @@ class User {
       updatedAt: map['updated_at'] as String,
     );
   }
+
+  User copyWith({
+    int? id,
+    String? fullName,
+    String? email,
+    String? passwordHash,
+    String? phone,
+    String? profileImage,
+    String? university,
+    String? role,
+    bool? isVerified,
+    bool? isActive,
+    String? createdAt,
+    String? updatedAt,
+  }) {
+    return User(
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      passwordHash: passwordHash ?? this.passwordHash,
+      phone: phone ?? this.phone,
+      profileImage: profileImage ?? this.profileImage,
+      university: university ?? this.university,
+      role: role ?? this.role,
+      isVerified: isVerified ?? this.isVerified,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 }   
