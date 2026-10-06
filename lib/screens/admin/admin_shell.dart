@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
+import 'dashboard/admin_dashboard_screen.dart';
 
 class AdminShell extends StatefulWidget {
-  const AdminShell({super.key});
+  final User user;
+
+  const AdminShell({
+    super.key,
+    required this.user,
+  });
 
   @override
   State<AdminShell> createState() => _AdminShellState();
@@ -12,40 +19,36 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    PlaceholderPage(
-      title: 'Dashboard',
-      subtitle: 'Vue globale de la plateforme.',
-      icon: Icons.dashboard_outlined,
-    ),
-    PlaceholderPage(
-      title: 'Utilisateurs',
-      subtitle: 'Gérez les utilisateurs de Covoit Campus.',
-      icon: Icons.people_outline_rounded,
-    ),
-    PlaceholderPage(
-      title: 'Trajets',
-      subtitle: 'Gérez les trajets de la plateforme.',
-      icon: Icons.route_outlined,
-    ),
-    PlaceholderPage(
-      title: 'Signalements',
-      subtitle: 'Traitez les signalements des utilisateurs.',
-      icon: Icons.report_problem_outlined,
-    ),
-    PlaceholderPage(
-      title: 'Profil',
-      subtitle: 'Gérez votre compte administrateur.',
-      icon: Icons.admin_panel_settings_outlined,
-    ),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      AdminDashboardScreen(admin: widget.user),
+      const PlaceholderPage(
+        title: 'Utilisateurs',
+        subtitle: 'Gérez les utilisateurs de Covoit Campus.',
+        icon: Icons.people_outline_rounded,
+      ),
+      const PlaceholderPage(
+        title: 'Trajets',
+        subtitle: 'Gérez les trajets de la plateforme.',
+        icon: Icons.route_outlined,
+      ),
+      const PlaceholderPage(
+        title: 'Signalements',
+        subtitle: 'Traitez les signalements des utilisateurs.',
+        icon: Icons.report_problem_outlined,
+      ),
+      const PlaceholderPage(
+        title: 'Profil',
+        subtitle: 'Gérez votre compte administrateur.',
+        icon: Icons.admin_panel_settings_outlined,
+      ),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: pages,
       ),
 
       bottomNavigationBar: NavigationBar(
