@@ -1,4 +1,5 @@
 import '../database/database_helper.dart';
+import '../models/booking.dart';
 import '../models/trip.dart';
 import '../models/trip_details.dart';
 import 'package:sqflite/sqflite.dart';
@@ -142,6 +143,7 @@ class TripRepository {
     final rows = await db.rawQuery('''
       SELECT
         trips.id,
+        trips.driver_id,
         trips.departure,
         trips.destination,
         trips.departure_date,
@@ -190,6 +192,7 @@ class TripRepository {
     final rows = await db.rawQuery('''
       SELECT
         trips.id,
+        trips.driver_id,
         trips.departure,
         trips.destination,
         trips.departure_date,
@@ -233,6 +236,86 @@ class TripRepository {
 
     if (rows.isEmpty) return null;
     return TripDetails.fromMap(rows.first);
+  }
+
+  Future<void> createBooking({
+    required int tripId,
+    required int passengerId,
+    required int seatsReserved,
+  }) async {
+    if (seatsReserved < 1) {
+      throw ArgumentError.value(seatsReserved, 'seatsReserved');
+    }
+
+    final db = await _databaseHelper.database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((transaction) async {
+      final passengerRows = await transaction.query(
+        'users',
+        columns: ['id', 'role', 'is_active'],
+        where: 'id = ?',
+        whereArgs: [passengerId],
+        limit: 1,
+      );
+      if (passengerRows.isEmpty ||
+          passengerRows.first['role'] != 'passenger' ||
+          passengerRows.first['is_active'] != 1) {
+        throw StateError('Passenger account is not valid.');
+      }
+
+      final tripRows = await transaction.query(
+        'trips',
+        columns: ['driver_id', 'available_seats', 'status'],
+        where: 'id = ?',
+        whereArgs: [tripId],
+        limit: 1,
+      );
+      if (tripRows.isEmpty) throw StateError('Trip not found.');
+      final trip = tripRows.first;
+      if (trip['driver_id'] == passengerId) {
+        throw StateError('A driver cannot book their own trip.');
+      }
+      if (trip['status'] != 'available') {
+        throw StateError('Trip is not available.');
+      }
+
+      final duplicateRows = await transaction.query(
+        'bookings',
+        columns: ['id'],
+        where: 'trip_id = ? AND passenger_id = ? AND status != ?',
+        whereArgs: [tripId, passengerId, 'cancelled'],
+        limit: 1,
+      );
+      if (duplicateRows.isNotEmpty) {
+        throw StateError('A booking already exists for this passenger.');
+      }
+
+      final availableSeats = trip['available_seats'] as int;
+      if (seatsReserved > availableSeats) {
+        throw StateError('Not enough seats are available.');
+      }
+
+      final booking = Booking(
+        tripId: tripId,
+        passengerId: passengerId,
+        seatsReserved: seatsReserved,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await transaction.insert('bookings', booking.toMap());
+      final updatedTrips = await transaction.update(
+        'trips',
+        {
+          'available_seats': availableSeats - seatsReserved,
+          'updated_at': now,
+        },
+        where: 'id = ? AND status = ? AND available_seats >= ?',
+        whereArgs: [tripId, 'available', seatsReserved],
+      );
+      if (updatedTrips != 1) {
+        throw StateError('Trip availability changed during booking.');
+      }
+    });
   }
 
   Future<int> createTrip(Trip trip) async {

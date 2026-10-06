@@ -176,11 +176,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               height: 52,
               child: ElevatedButton.icon(
                 onPressed: details.status == 'available' && details.availableSeats > 0
-                    ? () => _showInformationDialog(
-                          title: 'Réserver une place',
-                          message: 'La réservation sera disponible prochainement.',
-                          icon: Icons.event_seat_rounded,
-                        )
+                    ? () => _startBooking(details)
                     : null,
                 icon: const Icon(Icons.event_seat_rounded, size: 19),
                 label: const Text('Réserver une place'),
@@ -718,6 +714,340 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
     if (!mounted) return;
   }
 
+  Future<void> _startBooking(TripDetails details) async {
+    final passenger = widget.user;
+    if (passenger.id == null || passenger.role != 'passenger' || !passenger.isActive) {
+      await _showBookingMessage(
+        title: 'Connexion requise',
+        message: 'Connectez-vous avec un compte passager actif pour réserver.',
+        success: false,
+      );
+      if (!mounted) return;
+      return;
+    }
+    if (passenger.id == details.driverId) {
+      await _showBookingMessage(
+        title: 'Réservation impossible',
+        message: 'Vous ne pouvez pas réserver votre propre trajet.',
+        success: false,
+      );
+      if (!mounted) return;
+      return;
+    }
+
+    final result = await showDialog<_BookingDialogResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        var selectedSeats = 1;
+        var saving = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final totalPrice = details.price * selectedSeats;
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 21, 20, 18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryBlue.withValues(alpha: 0.12),
+                      blurRadius: 25,
+                      offset: const Offset(0, 9),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Confirmer la réservation',
+                      style: TextStyle(color: primaryBlue, fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 14),
+                    _bookingSummaryLine(
+                      Icons.route_rounded,
+                      '${details.departure} → ${details.destination}',
+                    ),
+                    const SizedBox(height: 8),
+                    _bookingSummaryLine(
+                      Icons.calendar_today_rounded,
+                      '${_formatBookingDate(details.departureDate)} • ${details.departureTime}',
+                    ),
+                    const SizedBox(height: 8),
+                    _bookingSummaryLine(
+                      Icons.payments_outlined,
+                      '${_formatNumber(details.price)} TND par passager',
+                    ),
+                    const SizedBox(height: 8),
+                    _bookingSummaryLine(
+                      Icons.event_seat_outlined,
+                      '${details.availableSeats} ${details.availableSeats == 1 ? 'place disponible' : 'places disponibles'}',
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Places à réserver',
+                            style: TextStyle(color: textGrey, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Retirer une place',
+                          onPressed: selectedSeats > 1 && !saving
+                              ? () => setDialogState(() => selectedSeats--)
+                              : null,
+                          icon: const Icon(Icons.remove_circle_outline_rounded),
+                          color: secondaryBlue,
+                        ),
+                        SizedBox(
+                          width: 28,
+                          child: Text(
+                            '$selectedSeats',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: primaryBlue, fontSize: 15, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Ajouter une place',
+                          onPressed: selectedSeats < details.availableSeats && !saving
+                              ? () => setDialogState(() => selectedSeats++)
+                              : null,
+                          icon: const Icon(Icons.add_circle_outline_rounded),
+                          color: green,
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 15, color: Color(0xFFE8EFEC)),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Total',
+                            style: TextStyle(color: primaryBlue, fontSize: 13, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        Text(
+                          '${_formatNumber(totalPrice)} TND',
+                          style: const TextStyle(color: green, fontSize: 17, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 17),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: primaryBlue,
+                              side: const BorderSide(color: Color(0xFFDCE7E3)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                            ),
+                            child: const Text('Retour'),
+                          ),
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: saving || selectedSeats < 1 || selectedSeats > details.availableSeats
+                                ? null
+                                : () async {
+                                    setDialogState(() => saving = true);
+                                    try {
+                                      final passengerId = passenger.id;
+                                      if (passengerId == null) {
+                                        throw StateError('Session passager invalide.');
+                                      }
+                                      await _tripRepository.createBooking(
+                                        tripId: details.id,
+                                        passengerId: passengerId,
+                                        seatsReserved: selectedSeats,
+                                      );
+                                      if (!mounted || !dialogContext.mounted) return;
+                                      Navigator.of(dialogContext).pop(
+                                        _BookingDialogResult.confirmed,
+                                      );
+                                    } catch (error) {
+                                      if (!mounted || !dialogContext.mounted) return;
+                                      Navigator.of(dialogContext).pop(
+                                        _BookingDialogResult.failed(_bookingErrorMessage(error)),
+                                      );
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: green,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                            ),
+                            child: saving
+                                ? const SizedBox(
+                                    width: 17,
+                                    height: 17,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Text('Confirmer'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || result == null) return;
+    if (result.error != null) {
+      await _showBookingMessage(
+        title: 'Réservation impossible',
+        message: result.error!,
+        success: false,
+      );
+      if (!mounted) return;
+      return;
+    }
+
+    await _loadTrip();
+    if (!mounted) return;
+    await _showBookingMessage(
+      title: 'Réservation confirmée',
+      message: 'Votre réservation a bien été enregistrée.',
+      success: true,
+    );
+    if (!mounted) return;
+  }
+
+  Widget _bookingSummaryLine(IconData icon, String text) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: secondaryBlue, size: 17),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: primaryBlue, fontSize: 11.5, height: 1.35),
+            ),
+          ),
+        ],
+      );
+
+  Future<void> _showBookingMessage({
+    required String title,
+    required String message,
+    required bool success,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: primaryBlue.withValues(alpha: 0.12),
+                blurRadius: 24,
+                offset: const Offset(0, 9),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: success ? lightGreen : const Color(0xFFFFF0EF),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  success ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+                  color: success ? green : const Color(0xFFB93E36),
+                  size: 26,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: primaryBlue, fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: textGrey, fontSize: 12, height: 1.5),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryBlue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                  ),
+                  child: const Text('Continuer'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+  }
+
+  String _bookingErrorMessage(Object error) {
+    final text = error.toString();
+    if (text.contains('already exists')) {
+      return 'Vous avez déjà une réservation pour ce trajet.';
+    }
+    if (text.contains('Not enough seats')) {
+      return 'Le nombre de places disponibles a changé. Actualisez le trajet puis réessayez.';
+    }
+    if (text.contains('own trip')) {
+      return 'Vous ne pouvez pas réserver votre propre trajet.';
+    }
+    if (text.contains('not available') || text.contains('Trip not found')) {
+      return 'Ce trajet n’est plus disponible.';
+    }
+    return 'La réservation n’a pas pu être enregistrée. Veuillez réessayer.';
+  }
+
+  String _formatBookingDate(String value) {
+    final date = DateTime.tryParse(value);
+    return date == null ? value : DateFormat('dd MMM yyyy', 'fr_FR').format(date);
+  }
+
   String _formatNumber(double number) =>
       number == number.roundToDouble() ? number.toStringAsFixed(0) : number.toStringAsFixed(2);
+}
+
+class _BookingDialogResult {
+  final String? error;
+
+  const _BookingDialogResult._(this.error);
+
+  static const confirmed = _BookingDialogResult._(null);
+
+  factory _BookingDialogResult.failed(String error) =>
+      _BookingDialogResult._(error);
 }

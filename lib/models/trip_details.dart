@@ -1,5 +1,6 @@
 class TripDetails {
   final int id;
+  final int driverId;
   final String departure;
   final String destination;
   final String departureDate;
@@ -23,6 +24,7 @@ class TripDetails {
 
   const TripDetails({
     required this.id,
+    required this.driverId,
     required this.departure,
     required this.destination,
     required this.departureDate,
@@ -49,6 +51,7 @@ class TripDetails {
     final rating = map['driver_rating'];
     return TripDetails(
       id: map['id'] as int,
+      driverId: map['driver_id'] as int,
       departure: map['departure'] as String,
       destination: map['destination'] as String,
       departureDate: map['departure_date'] as String,
