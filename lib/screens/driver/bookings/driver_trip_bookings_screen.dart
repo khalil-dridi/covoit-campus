@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/booking.dart';
 import '../../../models/user.dart';
 import '../../../repositories/booking_repository.dart';
+import '../../shared/messages/chat_screen.dart';
 import '../../shared/notifications_screen.dart';
 
 class DriverTripBookingsScreen extends StatefulWidget {
@@ -189,6 +190,28 @@ class _DriverTripBookingsScreenState extends State<DriverTripBookingsScreen> {
               ],
             ),
           ],
+          if (booking.status == 'pending' || booking.status == 'accepted') ...[
+            const SizedBox(height: 9),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openChat(booking),
+                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                label: const Text('Contacter le passager'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: secondaryBlue,
+                  side: const BorderSide(color: Color(0xFFDCE7E3)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -243,6 +266,26 @@ class _DriverTripBookingsScreenState extends State<DriverTripBookingsScreen> {
       );
       if (!mounted) return;
     }
+  }
+
+  void _openChat(Booking booking) {
+    final driverId = widget.user.id;
+    final passengerId = booking.passengerId;
+    final passengerName = booking.passengerName ?? 'Passager';
+    if (driverId == null) return;
+
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatScreen(
+          tripId: booking.tripId,
+          currentUser: widget.user,
+          otherUserId: passengerId,
+          otherUserName: passengerName,
+          tripDeparture: booking.departure,
+          tripDestination: booking.destination,
+        ),
+      ),
+    );
   }
 
   Future<void> _openNotifications() async {

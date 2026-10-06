@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../database/database_helper.dart';
 import '../../../models/trip_details.dart';
 import '../../../models/user.dart';
 import '../../../repositories/trip_repository.dart';
+import '../../shared/messages/chat_screen.dart';
 
 class TripDetailsScreen extends StatefulWidget {
   final int tripId;
@@ -153,11 +155,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               width: double.infinity,
               height: 49,
               child: OutlinedButton.icon(
-                onPressed: () => _showInformationDialog(
-                  title: 'Contacter le conducteur',
-                  message: 'La messagerie avec le conducteur sera disponible ici.',
-                  icon: Icons.chat_bubble_outline_rounded,
-                ),
+                onPressed: () => _openChat(details),
                 icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
                 label: const Text('Contacter le conducteur'),
                 style: OutlinedButton.styleFrom(
@@ -708,6 +706,162 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+  }
+
+  Future<void> _openChat(TripDetails details) async {
+    final passenger = widget.user;
+    final passengerId = passenger.id;
+    if (passengerId == null) {
+      await _showInformationDialog(
+        title: 'Connexion requise',
+        message: 'Connectez-vous avec un compte passager actif.',
+        icon: Icons.lock_outline_rounded,
+      );
+      if (!mounted) return;
+      return;
+    }
+
+    // Prevent a driver from contacting themselves via the passenger view.
+    if (passengerId == details.driverId) {
+      await _showInformationDialog(
+        title: 'Action non disponible',
+        message: 'Vous ne pouvez pas vous envoyer un message.',
+        icon: Icons.chat_bubble_outline_rounded,
+      );
+      if (!mounted) return;
+      return;
+    }
+
+    // Check that the passenger has a valid booking for this trip.
+    final db = await DatabaseHelper.instance.database;
+    if (!mounted) return;
+    final bookingRows = await db.query(
+      'bookings',
+      columns: ['id'],
+      where: 'trip_id = ? AND passenger_id = ? AND status IN (?, ?)',
+      whereArgs: [details.id, passengerId, 'pending', 'accepted'],
+      limit: 1,
+    );
+    if (!mounted) return;
+
+    if (bookingRows.isEmpty) {
+      // No valid booking — explain and offer to book.
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: primaryBlue.withValues(alpha: 0.12),
+                  blurRadius: 24,
+                  offset: const Offset(0, 9),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: const BoxDecoration(
+                    color: lightBlue,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: secondaryBlue,
+                    size: 27,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Réservation requise',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: primaryBlue,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'La messagerie est disponible uniquement après une réservation '
+                  'en attente ou acceptée pour ce trajet.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: textGrey.withValues(alpha: 0.82),
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryBlue,
+                          side: const BorderSide(color: Color(0xFFDCE7E3)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Retour'),
+                      ),
+                    ),
+                    if (details.status == 'available' &&
+                        details.availableSeats > 0) ...[
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(dialogContext).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: green,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Réserver'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (!mounted) return;
+      return;
+    }
+
+    // Valid booking found — open the chat.
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatScreen(
+          tripId: details.id,
+          currentUser: passenger,
+          otherUserId: details.driverId,
+          otherUserName: details.driverName,
+          tripDeparture: details.departure,
+          tripDestination: details.destination,
         ),
       ),
     );

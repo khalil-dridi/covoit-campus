@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
-import '../shared/placeholder_page.dart';
+import '../../widgets/messages/message_badge.dart';
+import '../shared/messages/conversations_screen.dart';
 import 'home/passenger_home_screen.dart';
 import 'profile/passenger_profile_screen.dart';
 import 'search/passenger_search_screen.dart';
@@ -34,12 +35,7 @@ class _PassengerShellState extends State<PassengerShell> {
 
       PassengerBookingsScreen(user: widget.user),
 
-      const PlaceholderPage(
-        title: 'Messages',
-        subtitle:
-            'Discutez avec les autres étudiants.',
-        icon: Icons.chat_bubble_outline_rounded,
-      ),
+      ConversationsScreen(currentUser: widget.user),
 
       PassengerProfileScreen(user: widget.user),
     ];
@@ -59,20 +55,20 @@ class _PassengerShellState extends State<PassengerShell> {
           });
         },
 
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded),
             label: 'Accueil',
           ),
 
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.search_outlined),
             selectedIcon: Icon(Icons.search_rounded),
             label: 'Rechercher',
           ),
 
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(
               Icons.confirmation_number_outlined,
             ),
@@ -83,16 +79,18 @@ class _PassengerShellState extends State<PassengerShell> {
           ),
 
           NavigationDestination(
-            icon: Icon(
-              Icons.chat_bubble_outline_rounded,
+            icon: MessageBadgeIcon(
+              userId: widget.user.id ?? 0,
+              selected: false,
             ),
-            selectedIcon: Icon(
-              Icons.chat_bubble_rounded,
+            selectedIcon: MessageBadgeIcon(
+              userId: widget.user.id ?? 0,
+              selected: true,
             ),
             label: 'Messages',
           ),
 
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
             selectedIcon: Icon(Icons.person_rounded),
             label: 'Profil',

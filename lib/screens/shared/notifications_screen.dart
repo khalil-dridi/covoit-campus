@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../database/database_helper.dart';
 import '../../models/app_notification.dart';
 import '../../models/user.dart';
+import '../../repositories/message_repository.dart';
 import '../../repositories/notification_repository.dart';
 import '../driver/bookings/driver_trip_bookings_screen.dart';
 import '../passenger/trips/passenger_booking_details_screen.dart';
+import 'messages/chat_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final User user;
@@ -189,7 +192,71 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             .toList(growable: false);
       });
     }
-    final references = _parseReferences(notification.type);
+
+    final type = notification.type ?? '';
+
+    // ---- Message notification: message:N;trip:N ----
+    if (type.startsWith('message:')) {
+      final msgMatch = RegExp(r'message:(\d+)').firstMatch(type);
+      final tripMatch = RegExp(r'trip:(\d+)').firstMatch(type);
+      final messageId = int.tryParse(msgMatch?.group(1) ?? '');
+      final tripId = int.tryParse(tripMatch?.group(1) ?? '');
+      if (messageId == null || tripId == null) return;
+
+      final msgRepo = MessageRepository();
+      final message = await msgRepo.getMessageById(messageId);
+      if (!mounted || message == null) return;
+
+      final otherUserId =
+          message.senderId == userId ? message.receiverId : message.senderId;
+
+      final db = await DatabaseHelper.instance.database;
+      if (!mounted) return;
+
+      final userRows = await db.query(
+        'users',
+        columns: ['full_name'],
+        where: 'id = ?',
+        whereArgs: [otherUserId],
+        limit: 1,
+      );
+      if (!mounted) return;
+      final otherName = userRows.isEmpty
+          ? 'Utilisateur'
+          : userRows.first['full_name'] as String;
+
+      final tripRows = await db.query(
+        'trips',
+        columns: ['departure', 'destination'],
+        where: 'id = ?',
+        whereArgs: [tripId],
+        limit: 1,
+      );
+      if (!mounted) return;
+      final departure =
+          tripRows.isEmpty ? null : tripRows.first['departure'] as String?;
+      final destination =
+          tripRows.isEmpty ? null : tripRows.first['destination'] as String?;
+
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ChatScreen(
+            tripId: tripId,
+            currentUser: widget.user,
+            otherUserId: otherUserId,
+            otherUserName: otherName,
+            tripDeparture: departure,
+            tripDestination: destination,
+          ),
+        ),
+      );
+      if (!mounted) return;
+      await _load();
+      return;
+    }
+
+    // ---- Booking notification: booking:N;trip:N ----
+    final references = _parseReferences(type);
     if (references == null) return;
     if (widget.user.role == 'driver') {
       await Navigator.of(context).push<void>(
