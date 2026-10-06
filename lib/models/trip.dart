@@ -14,6 +14,7 @@ class Trip {
   final String status;
   final String createdAt;
   final String updatedAt;
+  final int pendingRequests;
   final String driverName;
   final bool driverIsVerified;
   final String? driverProfileImage;
@@ -35,6 +36,7 @@ class Trip {
     this.status = 'available',
     required this.createdAt,
     required this.updatedAt,
+    this.pendingRequests = 0,
     this.driverName = '',
     this.driverIsVerified = false,
     this.driverProfileImage,
@@ -60,6 +62,7 @@ class Trip {
       status: map['status'] as String? ?? 'available',
       createdAt: map['created_at'] as String? ?? '',
       updatedAt: map['updated_at'] as String? ?? '',
+      pendingRequests: (map['pending_requests'] as int? ?? 0),
       driverName: map['driver_name'] as String? ?? '',
       driverIsVerified: map['driver_is_verified'] == 1,
       driverProfileImage: map['driver_profile_image'] as String?,

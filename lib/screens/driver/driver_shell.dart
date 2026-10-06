@@ -5,6 +5,7 @@ import '../shared/placeholder_page.dart';
 import 'home/driver_home_screen.dart';
 import 'profile/driver_profile_screen.dart';
 import 'publish/driver_publish_trip_screen.dart';
+import 'trips/driver_trips_screen.dart';
 
 class DriverShell extends StatefulWidget {
   final User user;
@@ -24,10 +25,14 @@ class _DriverShellState extends State<DriverShell> {
       GlobalKey<DriverHomeScreenState>();
   final GlobalKey<DriverPublishTripScreenState> _publishKey =
       GlobalKey<DriverPublishTripScreenState>();
+  final GlobalKey<DriverTripsScreenState> _tripsKey =
+      GlobalKey<DriverTripsScreenState>();
+  late final List<Widget> _pages;
 
   @override
-  Widget build(BuildContext context) {
-    final pages = <Widget>[
+  void initState() {
+    super.initState();
+    _pages = [
       DriverHomeScreen(
         key: _homeKey,
         user: widget.user,
@@ -38,14 +43,20 @@ class _DriverShellState extends State<DriverShell> {
       DriverPublishTripScreen(
         key: _publishKey,
         user: widget.user,
-        onTripPublished: () => _homeKey.currentState?.refresh(),
-        onViewTripsTap: () => setState(() => _currentIndex = 2),
+        onTripPublished: () {
+          _homeKey.currentState?.refresh();
+          _tripsKey.currentState?.refresh();
+        },
+        onViewTripsTap: () {
+          setState(() => _currentIndex = 2);
+          _tripsKey.currentState?.refresh();
+        },
         onAddVehicleTap: () => setState(() => _currentIndex = 4),
       ),
-      const PlaceholderPage(
-        title: 'Mes trajets',
-        subtitle: 'Gérez vos trajets publiés.',
-        icon: Icons.directions_car_outlined,
+      DriverTripsScreen(
+        key: _tripsKey,
+        user: widget.user,
+        onPublishTap: () => setState(() => _currentIndex = 1),
       ),
       const PlaceholderPage(
         title: 'Messages',
@@ -54,11 +65,14 @@ class _DriverShellState extends State<DriverShell> {
       ),
       DriverProfileScreen(user: widget.user),
     ];
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: pages,
+        children: _pages,
       ),
 
       bottomNavigationBar: NavigationBar(

@@ -91,6 +91,40 @@ class TripRepository {
         .toList(growable: false);
   }
 
+  Future<List<Trip>> getTripsForDriver(int driverId) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        trips.id,
+        trips.driver_id,
+        trips.vehicle_id,
+        trips.departure,
+        trips.destination,
+        trips.departure_date,
+        trips.departure_time,
+        trips.total_seats,
+        trips.available_seats,
+        trips.price,
+        trips.meeting_point,
+        trips.description,
+        trips.status,
+        trips.created_at,
+        trips.updated_at,
+        COALESCE((
+          SELECT SUM(bookings.seats_reserved)
+          FROM bookings
+          WHERE bookings.trip_id = trips.id
+            AND bookings.status = 'pending'
+        ), 0) AS pending_requests
+      FROM trips
+      WHERE trips.driver_id = ?
+      ORDER BY trips.departure_date ASC, trips.departure_time ASC,
+        trips.id DESC
+    ''', [driverId]);
+
+    return rows.map(Trip.fromMap).toList(growable: false);
+  }
+
   Future<int> createTrip(Trip trip) async {
     final db = await _databaseHelper.database;
 
@@ -123,6 +157,119 @@ class TripRepository {
         conflictAlgorithm: ConflictAlgorithm.abort,
       );
     });
+  }
+
+  Future<int> updateTrip({
+    required int tripId,
+    required int driverId,
+    required String departure,
+    required String destination,
+    required String departureDate,
+    required String departureTime,
+    required int totalSeats,
+    required int availableSeats,
+    required double price,
+    required String meetingPoint,
+    required String description,
+    required int vehicleId,
+  }) async {
+    final db = await _databaseHelper.database;
+    final now = DateTime.now().toIso8601String();
+
+    return db.transaction<int>((transaction) async {
+      final vehicles = await transaction.query(
+        'vehicles',
+        columns: ['id', 'user_id', 'seats'],
+        where: 'id = ? AND user_id = ?',
+        whereArgs: [vehicleId, driverId],
+        limit: 1,
+      );
+      if (vehicles.isEmpty) {
+        throw StateError('The selected vehicle does not belong to driver.');
+      }
+
+      final trip = await transaction.query(
+        'trips',
+        columns: ['id', 'total_seats', 'available_seats', 'status', 'driver_id'],
+        where: 'id = ? AND driver_id = ?',
+        whereArgs: [tripId, driverId],
+        limit: 1,
+      );
+      if (trip.isEmpty) {
+        throw StateError('The trip does not belong to driver.');
+      }
+
+      final existing = trip.first;
+      if ((existing['status'] as String? ?? 'available') != 'available') {
+        throw StateError('Only upcoming trips can be edited.');
+      }
+
+      final bookedSeats = await _bookedSeats(transaction, tripId);
+      if (totalSeats < bookedSeats) {
+        throw StateError('The seats cannot be lower than current reservations.');
+      }
+
+      final vehicleSeats = vehicles.first['seats'] as int;
+      if (totalSeats > vehicleSeats) {
+        throw StateError('The trip seats exceed the vehicle capacity.');
+      }
+
+      final usedSeats = totalSeats - availableSeats;
+      if (usedSeats < 0 || usedSeats > totalSeats) {
+        throw StateError('The available seats are invalid.');
+      }
+      if (usedSeats < bookedSeats) {
+        throw StateError('The available seats cannot be lower than current reservations.');
+      }
+
+      return transaction.update(
+        'trips',
+        {
+          'vehicle_id': vehicleId,
+          'departure': departure.trim(),
+          'destination': destination.trim(),
+          'departure_date': departureDate,
+          'departure_time': departureTime,
+          'total_seats': totalSeats,
+          'available_seats': availableSeats,
+          'price': price,
+          'meeting_point': meetingPoint.trim(),
+          'description': description.trim().isEmpty ? null : description.trim(),
+          'updated_at': now,
+        },
+        where: 'id = ? AND driver_id = ?',
+        whereArgs: [tripId, driverId],
+      );
+    });
+  }
+
+  Future<int> cancelTrip({
+    required int tripId,
+    required int driverId,
+  }) async {
+    final db = await _databaseHelper.database;
+    return db.update(
+      'trips',
+      {
+        'status': 'cancelled',
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ? AND driver_id = ? AND status = ?',
+      whereArgs: [tripId, driverId, 'available'],
+    );
+  }
+
+  Future<int> _bookedSeats(
+    Transaction transaction,
+    int tripId,
+  ) async {
+    final bookingRows = await transaction.rawQuery(
+      'SELECT COALESCE(SUM(seats_reserved), 0) AS booked_seats '
+      'FROM bookings '
+      'WHERE trip_id = ? AND status = ?',
+      [tripId, 'pending'],
+    );
+    return bookingRows.first['booked_seats'] as int? ?? 0;
   }
 
   int _minutesFromTime(String value) {
