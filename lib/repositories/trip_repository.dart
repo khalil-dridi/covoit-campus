@@ -1,5 +1,6 @@
 import '../database/database_helper.dart';
 import '../models/trip.dart';
+import '../models/trip_details.dart';
 import 'package:sqflite/sqflite.dart';
 
 enum TripSort { earliest, cheapest, bestRated }
@@ -123,6 +124,104 @@ class TripRepository {
     ''', [driverId]);
 
     return rows.map(Trip.fromMap).toList(growable: false);
+  }
+
+  Future<TripDetails?> getTripDetails(int tripId) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        trips.id,
+        trips.departure,
+        trips.destination,
+        trips.departure_date,
+        trips.departure_time,
+        trips.total_seats,
+        trips.available_seats,
+        trips.price,
+        trips.meeting_point,
+        trips.description,
+        trips.status,
+        drivers.full_name AS driver_name,
+        drivers.is_verified AS driver_is_verified,
+        drivers.profile_image AS driver_profile_image,
+        vehicles.brand AS vehicle_brand,
+        vehicles.model AS vehicle_model,
+        vehicles.color AS vehicle_color,
+        vehicles.seats AS vehicle_seats,
+        (
+          SELECT AVG(ratings.score)
+          FROM ratings
+          WHERE ratings.reviewed_id = drivers.id
+        ) AS driver_rating,
+        (
+          SELECT COUNT(*)
+          FROM ratings
+          WHERE ratings.reviewed_id = drivers.id
+        ) AS review_count
+      FROM trips
+      INNER JOIN users AS drivers
+        ON drivers.id = trips.driver_id AND drivers.role = 'driver'
+      INNER JOIN vehicles
+        ON vehicles.id = trips.vehicle_id AND vehicles.user_id = trips.driver_id
+      WHERE trips.id = ?
+      LIMIT 1
+    ''', [tripId]);
+
+    if (rows.isEmpty) return null;
+    return TripDetails.fromMap(rows.first);
+  }
+
+  Future<TripDetails?> getDriverTripDetails({
+    required int tripId,
+    required int driverId,
+  }) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        trips.id,
+        trips.departure,
+        trips.destination,
+        trips.departure_date,
+        trips.departure_time,
+        trips.total_seats,
+        trips.available_seats,
+        trips.price,
+        trips.meeting_point,
+        trips.description,
+        trips.status,
+        drivers.full_name AS driver_name,
+        drivers.is_verified AS driver_is_verified,
+        drivers.profile_image AS driver_profile_image,
+        vehicles.brand AS vehicle_brand,
+        vehicles.model AS vehicle_model,
+        vehicles.color AS vehicle_color,
+        vehicles.seats AS vehicle_seats,
+        (
+          SELECT AVG(ratings.score)
+          FROM ratings
+          WHERE ratings.reviewed_id = drivers.id
+        ) AS driver_rating,
+        (
+          SELECT COUNT(*)
+          FROM ratings
+          WHERE ratings.reviewed_id = drivers.id
+        ) AS review_count,
+        (
+          SELECT COUNT(*)
+          FROM bookings
+          WHERE bookings.trip_id = trips.id AND bookings.status = 'pending'
+        ) AS pending_requests
+      FROM trips
+      INNER JOIN users AS drivers
+        ON drivers.id = trips.driver_id AND drivers.role = 'driver'
+      INNER JOIN vehicles
+        ON vehicles.id = trips.vehicle_id AND vehicles.user_id = trips.driver_id
+      WHERE trips.id = ? AND trips.driver_id = ?
+      LIMIT 1
+    ''', [tripId, driverId]);
+
+    if (rows.isEmpty) return null;
+    return TripDetails.fromMap(rows.first);
   }
 
   Future<int> createTrip(Trip trip) async {

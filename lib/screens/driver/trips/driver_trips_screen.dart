@@ -9,6 +9,7 @@ import '../../../models/vehicle.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../../repositories/vehicle_repository.dart';
 import '../../../widgets/driver/driver_header.dart';
+import 'driver_trip_details_screen.dart';
 
 enum DriverTripsFilter { upcoming, past, cancelled }
 
@@ -314,7 +315,7 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
         (context, index) => _TripCard(
           trip: items[index],
           vehicle: _vehicles[items[index].vehicleId],
-          onDetails: () => _showDetailsDialog(items[index]),
+          onDetails: () => _openTripDetails(items[index]),
           onEdit: () => _editTrip(items[index]),
           onCancel: () => _cancelTrip(items[index]),
         ),
@@ -326,9 +327,11 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
     widget.onPublishTap?.call();
   }
 
-  Future<void> _editTrip(Trip trip) async {
-    final vehicles = await _vehicleRepository.getVehiclesForUser(widget.user.id!);
-    if (!mounted) return;
+  Future<bool> _editTrip(Trip trip) async {
+    final userId = widget.user.id;
+    if (userId == null) return false;
+    final vehicles = await _vehicleRepository.getVehiclesForUser(userId);
+    if (!mounted) return false;
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -340,8 +343,25 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
         user: widget.user,
       ),
     );
-    if (!mounted) return;
+    if (!mounted) return false;
     if (result == true) await _loadTrips();
+    return result == true;
+  }
+
+  Future<void> _openTripDetails(Trip trip) async {
+    final tripId = trip.id;
+    if (tripId == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => DriverTripDetailsScreen(
+          tripId: tripId,
+          user: widget.user,
+          onEditTrip: () => _editTrip(trip),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await _loadTrips();
   }
 
   Future<void> _cancelTrip(Trip trip) async {
@@ -382,22 +402,6 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
         icon: Icons.error_outline_rounded,
       );
     }
-  }
-
-  void _showDetailsDialog(Trip trip) {
-    if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => _CustomDialog(
-        icon: Icons.info_outline_rounded,
-        title: 'Détails du trajet',
-        message: '${trip.departure} → ${trip.destination}\n\n${_formatDate(trip.departureDate)} à ${trip.departureTime}\n${trip.meetingPoint.isEmpty ? 'Point de rendez-vous non précisé' : trip.meetingPoint}',
-        cancelLabel: 'Fermer',
-        confirmLabel: 'Voir bientôt',
-        showCancel: false,
-        onConfirm: () => Navigator.of(dialogContext).pop(),
-      ),
-    );
   }
 
   void _showInfoDialog({
@@ -441,10 +445,6 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
       int.parse(timeParts[1]),
     );
   }
-
-  String _formatDate(String isoDate) => DateFormat('dd MMM', 'fr_FR').format(
-        DateTime.parse(isoDate),
-      );
 
 }
 
@@ -1061,7 +1061,6 @@ class _CustomDialog extends StatelessWidget {
     this.confirmLabel,
     this.onCancel,
     this.onConfirm,
-    this.showCancel = true,
   });
 
   final IconData icon;
@@ -1071,7 +1070,6 @@ class _CustomDialog extends StatelessWidget {
   final String? confirmLabel;
   final VoidCallback? onCancel;
   final VoidCallback? onConfirm;
-  final bool showCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -1114,47 +1112,33 @@ class _CustomDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            if (showCancel) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: onCancel,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF123D68),
-                        side: const BorderSide(color: Color(0xFFD7E5E0)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text(cancelLabel ?? 'Retour'),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onCancel,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF123D68),
+                      side: const BorderSide(color: Color(0xFFD7E5E0)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                    child: Text(cancelLabel ?? 'Retour'),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: onConfirm,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF123D68),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text(confirmLabel ?? 'Valider'),
-                    ),
-                  ),
-                ],
-              ),
-            ] else
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: onConfirm,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF123D68),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(confirmLabel ?? 'Compris'),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: onConfirm,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF123D68),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(confirmLabel ?? 'Valider'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

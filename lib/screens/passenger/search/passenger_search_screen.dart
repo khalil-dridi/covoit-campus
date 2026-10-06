@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/trip.dart';
 import '../../../models/user.dart';
 import '../../../repositories/trip_repository.dart';
+import '../trips/trip_details_screen.dart';
 import '../../../widgets/passenger/passenger_header.dart';
 
 class PassengerSearchScreen extends StatefulWidget {
@@ -398,7 +399,10 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
           const SizedBox(height: 10),
           ..._results.map((trip) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _TripResultCard(trip: trip),
+                child: _TripResultCard(
+                  trip: trip,
+                  onDetails: () => _openTripDetails(trip),
+                ),
               )),
         ],
       ],
@@ -650,6 +654,20 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
         curve: Curves.easeOutCubic,
       );
     }
+  }
+
+  Future<void> _openTripDetails(Trip trip) async {
+    final tripId = trip.id;
+    if (tripId == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TripDetailsScreen(
+          tripId: tripId,
+          user: widget.user,
+        ),
+      ),
+    );
+    if (!mounted) return;
   }
 
   void _showInfoDialog(
@@ -1077,8 +1095,9 @@ class _FilterSheetState extends State<_FilterSheet> {
 
 class _TripResultCard extends StatelessWidget {
   final Trip trip;
+  final VoidCallback onDetails;
 
-  const _TripResultCard({required this.trip});
+  const _TripResultCard({required this.trip, required this.onDetails});
 
   @override
   Widget build(BuildContext context) {
@@ -1231,6 +1250,18 @@ class _TripResultCard extends StatelessWidget {
                   color: PassengerSearchScreenStateColors.textGrey,
                   fontSize: 9,
                 ),
+              ),
+              TextButton.icon(
+                onPressed: onDetails,
+                style: TextButton.styleFrom(
+                  foregroundColor: PassengerSearchScreenStateColors.secondaryBlue,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                ),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 13),
+                label: const Text('Voir détails'),
               ),
             ],
           ),
