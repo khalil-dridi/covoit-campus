@@ -125,11 +125,6 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
                     children: [
                       DriverHeader(
                         user: widget.user,
-                        onNotificationTap: () => _showInfoDialog(
-                          title: 'Notifications',
-                          message: 'Vos notifications seront disponibles ici.',
-                          icon: Icons.notifications_none_rounded,
-                        ),
                       ),
                       const SizedBox(height: 20),
                       const Text(

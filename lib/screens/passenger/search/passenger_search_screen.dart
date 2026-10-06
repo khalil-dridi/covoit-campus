@@ -24,7 +24,6 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
   static const Color green = Color(0xFF20B978);
   static const Color background = Color(0xFFF4FFFB);
   static const Color textGrey = Color(0xFF547080);
-  static const Color lightGreen = Color(0xFFE8F8F1);
 
   static const List<String> _cities = [
     'Tunis',
@@ -70,11 +69,6 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
             children: [
               PassengerHeader(
                 user: widget.user,
-                onNotificationTap: () => _showInfoDialog(
-                  context,
-                  title: 'Notifications',
-                  message: 'Vos notifications seront disponibles ici.',
-                ),
               ),
               const SizedBox(height: 22),
               const Text(
@@ -666,88 +660,6 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
       ),
     );
     if (!mounted) return;
-  }
-
-  void _showInfoDialog(
-    BuildContext context, {
-    required String title,
-    required String message,
-  }) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(26),
-            boxShadow: [
-              BoxShadow(
-                color: primaryBlue.withValues(alpha: 0.12),
-                blurRadius: 28,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 62,
-                height: 62,
-                decoration: const BoxDecoration(
-                  color: lightGreen,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.info_outline_rounded, color: green, size: 28),
-              ),
-              const SizedBox(height: 17),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: primaryBlue,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 9),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: textGrey.withValues(alpha: 0.84),
-                  fontSize: 13,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 21),
-              SizedBox(
-                width: double.infinity,
-                height: 47,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryBlue,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                  child: const Text(
-                    'Compris',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
 }

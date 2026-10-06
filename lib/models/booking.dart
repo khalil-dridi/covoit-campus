@@ -23,6 +23,9 @@ class Booking {
   final String? vehicleModel;
   final String? vehicleColor;
   final int? vehicleSeats;
+  final String? passengerName;
+  final String? passengerImage;
+  final String? passengerUniversity;
 
   const Booking({
     this.id,
@@ -49,6 +52,9 @@ class Booking {
     this.vehicleModel,
     this.vehicleColor,
     this.vehicleSeats,
+    this.passengerName,
+    this.passengerImage,
+    this.passengerUniversity,
   });
 
   factory Booking.fromMap(Map<String, Object?> map) => Booking(
@@ -78,6 +84,9 @@ class Booking {
         vehicleModel: map['vehicle_model'] as String?,
         vehicleColor: map['vehicle_color'] as String?,
         vehicleSeats: map['vehicle_seats'] as int?,
+        passengerName: map['passenger_name'] as String?,
+        passengerImage: map['passenger_image'] as String?,
+        passengerUniversity: map['passenger_university'] as String?,
       );
 
   Map<String, Object?> toMap() => {

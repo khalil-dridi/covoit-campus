@@ -244,7 +244,11 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
 
   Widget _statusBadge(String status) {
     final cancelled = status == 'cancelled';
-    final color = cancelled ? const Color(0xFFB63A3A) : status == 'pending' ? secondaryBlue : green;
+    final color = cancelled || status == 'rejected'
+      ? const Color(0xFFB63A3A)
+      : status == 'pending'
+        ? secondaryBlue
+        : green;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(9)),
@@ -253,7 +257,9 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
   }
 
   bool _matchesFilter(Booking booking) {
-    final cancelled = booking.status == 'cancelled' || booking.tripStatus == 'cancelled';
+    final cancelled = booking.status == 'cancelled' ||
+      booking.status == 'rejected' ||
+      booking.tripStatus == 'cancelled';
     if (_filter == _BookingFilter.cancelled) return cancelled;
     if (cancelled) return false;
     final date = _departure(booking);
@@ -332,7 +338,8 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
 
   String _bookingStatusLabel(String status) => switch (status) {
         'pending' => 'En attente',
-        'confirmed' => 'Confirmée',
+      'accepted' => 'Acceptée',
+      'rejected' => 'Refusée',
         'cancelled' => 'Annulée',
         _ => status,
       };

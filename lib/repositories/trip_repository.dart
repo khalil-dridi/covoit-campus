@@ -2,6 +2,7 @@ import '../database/database_helper.dart';
 import '../models/booking.dart';
 import '../models/trip.dart';
 import '../models/trip_details.dart';
+import 'notification_repository.dart';
 import 'package:sqflite/sqflite.dart';
 
 enum TripSort { earliest, cheapest, bestRated }
@@ -265,7 +266,7 @@ class TripRepository {
 
       final tripRows = await transaction.query(
         'trips',
-        columns: ['driver_id', 'available_seats', 'status'],
+        columns: ['driver_id', 'departure', 'destination', 'available_seats', 'status'],
         where: 'id = ?',
         whereArgs: [tripId],
         limit: 1,
@@ -282,8 +283,8 @@ class TripRepository {
       final duplicateRows = await transaction.query(
         'bookings',
         columns: ['id'],
-        where: 'trip_id = ? AND passenger_id = ? AND status != ?',
-        whereArgs: [tripId, passengerId, 'cancelled'],
+        where: 'trip_id = ? AND passenger_id = ? AND status IN (?, ?)',
+        whereArgs: [tripId, passengerId, 'pending', 'accepted'],
         limit: 1,
       );
       if (duplicateRows.isNotEmpty) {
@@ -302,7 +303,7 @@ class TripRepository {
         createdAt: now,
         updatedAt: now,
       );
-      await transaction.insert('bookings', booking.toMap());
+      final bookingId = await transaction.insert('bookings', booking.toMap());
       final updatedTrips = await transaction.update(
         'trips',
         {
@@ -315,7 +316,18 @@ class TripRepository {
       if (updatedTrips != 1) {
         throw StateError('Trip availability changed during booking.');
       }
+      final driverId = trip['driver_id'] as int;
+      await NotificationRepository.insertInTransaction(
+        transaction: transaction,
+        userId: driverId,
+        title: 'Nouvelle demande de réservation',
+        body: 'Un passager a demandé $seatsReserved place(s) pour votre trajet '
+            '${trip['departure']} → ${trip['destination']}.',
+        type: 'booking:$bookingId;trip:$tripId',
+        createdAt: now,
+      );
     });
+    NotificationRepository.notifyChanged();
   }
 
   Future<int> createTrip(Trip trip) async {

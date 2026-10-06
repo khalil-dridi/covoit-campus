@@ -88,11 +88,6 @@ class PassengerHomeScreen extends StatelessWidget {
         const SizedBox(height: 276),
         PassengerHeader(
           user: user,
-          onNotificationTap: () => _showInfoDialog(
-            context,
-            title: 'Notifications',
-            message: 'Vos notifications seront disponibles ici.',
-          ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 222, 8, 0),

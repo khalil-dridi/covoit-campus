@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/trip_details.dart';
 import '../../../models/user.dart';
 import '../../../repositories/trip_repository.dart';
+import '../bookings/driver_trip_bookings_screen.dart';
 
 class DriverTripDetailsScreen extends StatefulWidget {
   final int tripId;
@@ -181,6 +182,22 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
             _section('Réservations'),
             const SizedBox(height: 8),
             _bookingCard(trip),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 47,
+              child: OutlinedButton.icon(
+                onPressed: _openTripBookings,
+                icon: const Icon(Icons.people_outline_rounded, size: 18),
+                label: const Text('Voir les réservations'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: secondaryBlue,
+                  side: const BorderSide(color: Color(0xFFDCE7E3)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
             const SizedBox(height: 22),
             SizedBox(
               width: double.infinity,
@@ -377,6 +394,20 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
     final updated = await editTrip();
     if (!mounted) return;
     if (updated) await _loadTrip();
+  }
+
+  Future<void> _openTripBookings() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => DriverTripBookingsScreen(
+          tripId: widget.tripId,
+          user: widget.user,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await _loadTrip();
+    if (!mounted) return;
   }
 
   Future<void> _confirmCancel() async {

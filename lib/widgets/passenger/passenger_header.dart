@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
+import '../shared/notification_bell.dart';
 
 class PassengerHeader extends StatelessWidget {
   final User user;
@@ -142,16 +143,14 @@ class PassengerHeader extends StatelessWidget {
           ),
         ],
       ),
-      child: IconButton(
-        tooltip: 'Notifications',
-        onPressed: onNotificationTap,
-        padding: EdgeInsets.zero,
-        icon: const Icon(
-          Icons.notifications_none_rounded,
-          color: primaryBlue,
-          size: 23,
-        ),
-      ),
+      child: onNotificationTap == null
+          ? NotificationBell(user: user, iconColor: primaryBlue, size: 23)
+          : IconButton(
+              tooltip: 'Notifications',
+              onPressed: onNotificationTap,
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.notifications_none_rounded, color: primaryBlue, size: 23),
+            ),
     );
   }
 

@@ -119,7 +119,7 @@ class _PassengerBookingDetailsScreenState extends State<PassengerBookingDetailsS
 
   Widget _content(Booking booking) {
     final tripDate = _departure(booking);
-    final canCancel = booking.status == 'pending' &&
+    final canCancel = (booking.status == 'pending' || booking.status == 'accepted') &&
         booking.tripStatus == 'available' &&
         tripDate != null &&
         tripDate.isAfter(DateTime.now());
@@ -362,7 +362,8 @@ class _PassengerBookingDetailsScreenState extends State<PassengerBookingDetailsS
 
   String _bookingStatus(String status) => switch (status) {
         'pending' => 'En attente',
-        'confirmed' => 'Confirmée',
+      'accepted' => 'Acceptée',
+      'rejected' => 'Refusée',
         'cancelled' => 'Annulée',
         _ => status,
       };

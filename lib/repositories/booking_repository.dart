@@ -1,8 +1,125 @@
 import '../database/database_helper.dart';
 import '../models/booking.dart';
+import 'notification_repository.dart';
 
 class BookingRepository {
   final DatabaseHelper _databaseHelper = DatabaseHelper.instance;
+
+  Future<List<Booking>> getBookingsForDriverTrip({
+    required int tripId,
+    required int driverId,
+  }) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        bookings.id,
+        bookings.trip_id,
+        bookings.passenger_id,
+        bookings.seats_reserved,
+        bookings.status,
+        bookings.created_at,
+        bookings.updated_at,
+        trips.departure,
+        trips.destination,
+        trips.departure_date,
+        trips.departure_time,
+        trips.price AS price_per_seat,
+        trips.available_seats AS trip_available_seats,
+        trips.total_seats AS trip_total_seats,
+        trips.status AS trip_status,
+        passengers.full_name AS passenger_name,
+        passengers.profile_image AS passenger_image,
+        passengers.university AS passenger_university
+      FROM bookings
+      INNER JOIN trips ON trips.id = bookings.trip_id
+      INNER JOIN users AS passengers ON passengers.id = bookings.passenger_id
+      WHERE bookings.trip_id = ? AND trips.driver_id = ?
+      ORDER BY bookings.created_at DESC, bookings.id DESC
+    ''', [tripId, driverId]);
+    return rows.map(Booking.fromMap).toList(growable: false);
+  }
+
+  Future<void> decideBooking({
+    required int bookingId,
+    required int driverId,
+    required bool accept,
+  }) async {
+    final db = await _databaseHelper.database;
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+    await db.transaction((transaction) async {
+      final rows = await transaction.rawQuery('''
+        SELECT
+          bookings.trip_id,
+          bookings.passenger_id,
+          bookings.seats_reserved,
+          bookings.status AS booking_status,
+          trips.driver_id,
+          trips.departure,
+          trips.destination,
+          trips.departure_date,
+          trips.departure_time,
+          trips.available_seats,
+          trips.total_seats,
+          trips.status AS trip_status
+        FROM bookings
+        INNER JOIN trips ON trips.id = bookings.trip_id
+        WHERE bookings.id = ? AND trips.driver_id = ?
+        LIMIT 1
+      ''', [bookingId, driverId]);
+      if (rows.isEmpty) throw StateError('Booking not found for this driver.');
+      final row = rows.first;
+      if (row['booking_status'] != 'pending') {
+        throw StateError('Only pending bookings can be decided.');
+      }
+      if (row['trip_status'] != 'available') {
+        throw StateError('Trip is not available.');
+      }
+
+      final status = accept ? 'accepted' : 'rejected';
+      final changedBookings = await transaction.update(
+        'bookings',
+        {'status': status, 'updated_at': nowIso},
+        where: 'id = ? AND status = ?',
+        whereArgs: [bookingId, 'pending'],
+      );
+      if (changedBookings != 1) throw StateError('Booking has changed.');
+
+      if (!accept) {
+        final seatsReserved = row['seats_reserved'] as int;
+        final availableSeats = row['available_seats'] as int;
+        final totalSeats = row['total_seats'] as int;
+        if (availableSeats + seatsReserved > totalSeats) {
+          throw StateError('Trip seat data is inconsistent.');
+        }
+        final changedTrips = await transaction.update(
+          'trips',
+          {
+            'available_seats': availableSeats + seatsReserved,
+            'updated_at': nowIso,
+          },
+          where: 'id = ? AND driver_id = ? AND status = ?',
+          whereArgs: [row['trip_id'], driverId, 'available'],
+        );
+        if (changedTrips != 1) throw StateError('Trip availability changed.');
+      }
+
+      final departure = row['departure'] as String;
+      final destination = row['destination'] as String;
+      await NotificationRepository.insertInTransaction(
+        transaction: transaction,
+        userId: row['passenger_id'] as int,
+        title: accept
+            ? 'Votre réservation a été acceptée'
+            : 'Votre réservation a été refusée',
+        body: 'Votre réservation pour le trajet $departure → $destination '
+            'a été ${accept ? 'acceptée' : 'refusée'}.',
+        type: 'booking:$bookingId;trip:${row['trip_id']}',
+        createdAt: nowIso,
+      );
+    });
+    NotificationRepository.notifyChanged();
+  }
 
   Future<List<Booking>> getBookingsForPassenger(int passengerId) async {
     final db = await _databaseHelper.database;
@@ -115,8 +232,8 @@ class BookingRepository {
       final booking = rows.first;
       final bookingStatus = booking['booking_status'] as String;
       final tripStatus = booking['trip_status'] as String;
-      if (bookingStatus != 'pending') {
-        throw StateError('Only pending bookings can be cancelled.');
+      if (bookingStatus != 'pending' && bookingStatus != 'accepted') {
+        throw StateError('This booking can no longer be cancelled.');
       }
       if (tripStatus != 'available' ||
           _tripHasPassed(
@@ -139,7 +256,7 @@ class BookingRepository {
         'bookings',
         {'status': 'cancelled', 'updated_at': nowIso},
         where: 'id = ? AND passenger_id = ? AND status = ?',
-        whereArgs: [bookingId, passengerId, 'pending'],
+        whereArgs: [bookingId, passengerId, bookingStatus],
       );
       if (changedBookings != 1) throw StateError('Booking has changed.');
 
