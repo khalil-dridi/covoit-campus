@@ -6,6 +6,23 @@ class Booking {
   final String status;
   final String createdAt;
   final String updatedAt;
+  final String? departure;
+  final String? destination;
+  final String? departureDate;
+  final String? departureTime;
+  final double? pricePerSeat;
+  final int? tripAvailableSeats;
+  final int? tripTotalSeats;
+  final String? tripStatus;
+  final String? meetingPoint;
+  final String? description;
+  final String? driverName;
+  final bool? driverIsVerified;
+  final String? driverProfileImage;
+  final String? vehicleBrand;
+  final String? vehicleModel;
+  final String? vehicleColor;
+  final int? vehicleSeats;
 
   const Booking({
     this.id,
@@ -15,6 +32,23 @@ class Booking {
     this.status = 'pending',
     required this.createdAt,
     required this.updatedAt,
+    this.departure,
+    this.destination,
+    this.departureDate,
+    this.departureTime,
+    this.pricePerSeat,
+    this.tripAvailableSeats,
+    this.tripTotalSeats,
+    this.tripStatus,
+    this.meetingPoint,
+    this.description,
+    this.driverName,
+    this.driverIsVerified,
+    this.driverProfileImage,
+    this.vehicleBrand,
+    this.vehicleModel,
+    this.vehicleColor,
+    this.vehicleSeats,
   });
 
   factory Booking.fromMap(Map<String, Object?> map) => Booking(
@@ -25,6 +59,25 @@ class Booking {
         status: map['status'] as String? ?? 'pending',
         createdAt: map['created_at'] as String,
         updatedAt: map['updated_at'] as String,
+        departure: map['departure'] as String?,
+        destination: map['destination'] as String?,
+        departureDate: map['departure_date'] as String?,
+        departureTime: map['departure_time'] as String?,
+        pricePerSeat: (map['price_per_seat'] as num?)?.toDouble(),
+        tripAvailableSeats: map['trip_available_seats'] as int?,
+        tripTotalSeats: map['trip_total_seats'] as int?,
+        tripStatus: map['trip_status'] as String?,
+        meetingPoint: map['meeting_point'] as String?,
+        description: map['description'] as String?,
+        driverName: map['driver_name'] as String?,
+        driverIsVerified: map['driver_is_verified'] == null
+            ? null
+            : map['driver_is_verified'] == 1,
+        driverProfileImage: map['driver_profile_image'] as String?,
+        vehicleBrand: map['vehicle_brand'] as String?,
+        vehicleModel: map['vehicle_model'] as String?,
+        vehicleColor: map['vehicle_color'] as String?,
+        vehicleSeats: map['vehicle_seats'] as int?,
       );
 
   Map<String, Object?> toMap() => {
