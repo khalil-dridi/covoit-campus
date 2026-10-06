@@ -24,7 +24,10 @@ class _PassengerShellState extends State<PassengerShell> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
-      PassengerHomeScreen(user: widget.user),
+      PassengerHomeScreen(
+        user: widget.user,
+        onSearchTap: () => setState(() => _currentIndex = 1),
+      ),
 
       PassengerSearchScreen(user: widget.user),
 

@@ -5,10 +5,12 @@ import '../../../widgets/passenger/passenger_header.dart';
 
 class PassengerHomeScreen extends StatelessWidget {
   final User user;
+  final VoidCallback onSearchTap;
 
   const PassengerHomeScreen({
     super.key,
     required this.user,
+    required this.onSearchTap,
   });
 
   static const Color primaryBlue = Color(0xFF123D68);
@@ -153,7 +155,7 @@ class PassengerHomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              _swapButton(context),
+              _swapButton(),
             ],
           ),
           const SizedBox(height: 15),
@@ -206,7 +208,7 @@ class PassengerHomeScreen extends StatelessWidget {
             width: double.infinity,
             height: 49,
             child: ElevatedButton.icon(
-              onPressed: () => _showSearchInfo(context),
+              onPressed: onSearchTap,
               icon: const Icon(Icons.search_rounded, size: 19),
               label: const Text(
                 'Rechercher un trajet',
@@ -227,14 +229,14 @@ class PassengerHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _swapButton(BuildContext context) {
+  Widget _swapButton() {
     return SizedBox(
       width: 34,
       height: 34,
       child: IconButton(
         tooltip: 'Inverser les villes',
         padding: EdgeInsets.zero,
-        onPressed: () => _showSearchInfo(context),
+        onPressed: onSearchTap,
         icon: const Icon(
           Icons.swap_vert_rounded,
           color: secondaryBlue,
@@ -252,7 +254,7 @@ class PassengerHomeScreen extends StatelessWidget {
     required String value,
   }) {
     return _SearchInputSurface(
-      onTap: () => _showSearchInfo(context),
+      onTap: onSearchTap,
       child: Row(
         children: [
           Icon(icon, color: iconColor, size: 19),
@@ -296,7 +298,7 @@ class PassengerHomeScreen extends StatelessWidget {
     required String value,
   }) {
     return _SearchInputSurface(
-      onTap: () => _showSearchInfo(context),
+      onTap: onSearchTap,
       compact: true,
       child: Row(
         children: [
@@ -345,6 +347,7 @@ class PassengerHomeScreen extends StatelessWidget {
             title: 'Rechercher\nun trajet',
             foreground: secondaryBlue,
             surface: lightBlue,
+            onTap: onSearchTap,
           ),
         ),
         const SizedBox(width: 7),
@@ -387,17 +390,19 @@ class PassengerHomeScreen extends StatelessWidget {
     required String title,
     required Color foreground,
     required Color surface,
+    VoidCallback? onTap,
   }) {
     return Material(
       color: surface,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _showInfoDialog(
-          context,
-          title: title.replaceAll('\n', ' '),
-          message: 'Cette section sera disponible prochainement.',
-        ),
+        onTap: onTap ??
+            () => _showInfoDialog(
+              context,
+              title: title.replaceAll('\n', ' '),
+              message: 'Cette section sera disponible prochainement.',
+            ),
         child: SizedBox(
           height: 106,
           child: Padding(
@@ -537,16 +542,6 @@ class PassengerHomeScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  void _showSearchInfo(BuildContext context) {
-    _showInfoDialog(
-      context,
-      title: 'Recherche de trajet',
-      message:
-          'Cette fonctionnalité sera connectée à la recherche de trajets '
-          'dans une prochaine étape.',
     );
   }
 

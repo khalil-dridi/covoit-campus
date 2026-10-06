@@ -10,33 +10,40 @@ class TripRepository {
 
   Future<List<Trip>> searchAvailableTrips({
     required int passengerId,
-    required String departure,
-    required String destination,
-    required String departureDate,
-    required String departureTime,
-    required int seats,
-    required bool flexibleTime,
-    required bool verifiedDriversOnly,
+    String? departure,
+    String? destination,
+    String? departureDate,
+    String? departureTime,
+    int seats = 1,
+    bool flexibleTime = false,
+    bool verifiedDriversOnly = false,
     double? maxPrice,
     TripSort sort = TripSort.earliest,
   }) async {
     final db = await _databaseHelper.database;
     final where = <String>[
-      'trips.departure = ?',
-      'trips.destination = ?',
-      'trips.departure_date = ?',
       'trips.available_seats >= ?',
       "trips.status = 'available'",
       'drivers.is_active = 1',
       'trips.driver_id != ?',
     ];
-    final whereArgs = <Object?>[
-      departure,
-      destination,
-      departureDate,
-      seats,
-      passengerId,
-    ];
+    final whereArgs = <Object?>[seats < 1 ? 1 : seats, passengerId];
+
+    final departureFilter = departure?.trim();
+    if (departureFilter != null && departureFilter.isNotEmpty) {
+      where.add('trips.departure = ?');
+      whereArgs.add(departureFilter);
+    }
+    final destinationFilter = destination?.trim();
+    if (destinationFilter != null && destinationFilter.isNotEmpty) {
+      where.add('trips.destination = ?');
+      whereArgs.add(destinationFilter);
+    }
+    final dateFilter = departureDate?.trim();
+    if (dateFilter != null && dateFilter.isNotEmpty) {
+      where.add('trips.departure_date = ?');
+      whereArgs.add(dateFilter);
+    }
 
     if (verifiedDriversOnly) {
       where.add('drivers.is_verified = 1');
@@ -81,10 +88,14 @@ class TripRepository {
       ORDER BY $orderBy
     ''', whereArgs);
 
-    final requestedMinutes = _minutesFromTime(departureTime);
+    final timeFilter = departureTime?.trim();
+    final requestedMinutes = timeFilter == null || timeFilter.isEmpty
+        ? null
+        : _minutesFromTime(timeFilter);
     return rows
         .map(Trip.fromMap)
         .where((trip) {
+          if (requestedMinutes == null) return true;
           final tripMinutes = _minutesFromTime(trip.departureTime);
           final difference = tripMinutes - requestedMinutes;
           return flexibleTime ? difference.abs() <= 60 : difference >= 0;

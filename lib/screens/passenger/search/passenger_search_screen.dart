@@ -388,11 +388,14 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
         if (_results.isEmpty)
           _SearchEmptyState(
             icon: Icons.search_off_rounded,
-            title: 'Aucun trajet trouvé',
-            message:
-                'Nous n’avons trouvé aucun trajet correspondant à vos critères.',
-            actionLabel: 'Modifier ma recherche',
-            onAction: _focusCriteria,
+          title: _hasSearchCriteria
+            ? 'Aucun trajet trouvé'
+            : 'Ajoutez un critère de recherche',
+          message: _hasSearchCriteria
+            ? 'Nous n’avons trouvé aucun trajet correspondant à vos critères.'
+            : 'Choisissez au moins un critère pour rechercher des trajets.',
+          actionLabel: _hasSearchCriteria ? 'Modifier ma recherche' : null,
+          onAction: _hasSearchCriteria ? _focusCriteria : null,
           )
         else ...[
           _buildResultControls(),
@@ -583,25 +586,12 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
   }
 
   Future<void> _searchTrips() async {
-    if (_departure == null) {
-      setState(() => _errorMessage = 'Veuillez choisir une ville de départ.');
-      return;
-    }
-    if (_destination == null) {
-      setState(() => _errorMessage = 'Veuillez choisir une ville d’arrivée.');
-      return;
-    }
-    if (_departure == _destination) {
-      setState(() => _errorMessage =
-          'Les villes de départ et d’arrivée doivent être différentes.');
-      return;
-    }
-    if (_date == null) {
-      setState(() => _errorMessage = 'Veuillez choisir une date de trajet.');
-      return;
-    }
-    if (_time == null) {
-      setState(() => _errorMessage = 'Veuillez choisir une heure de départ.');
+    if (!_hasSearchCriteria) {
+      setState(() {
+        _results = const [];
+        _hasSearched = true;
+        _errorMessage = null;
+      });
       return;
     }
 
@@ -613,10 +603,10 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
     try {
       final trips = await _tripRepository.searchAvailableTrips(
         passengerId: widget.user.id ?? -1,
-        departure: _departure!,
-        destination: _destination!,
-        departureDate: _formatIsoDate(_date!),
-        departureTime: _formatTime(_time!),
+        departure: _departure,
+        destination: _destination,
+        departureDate: _date == null ? null : _formatIsoDate(_date!),
+        departureTime: _time == null ? null : _formatTime(_time!),
         seats: _seats,
         flexibleTime: _flexibleTime,
         verifiedDriversOnly: _verifiedDriversOnly,
@@ -644,6 +634,14 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
       (_verifiedDriversOnly ? 1 : 0) +
       (_flexibleTime ? 1 : 0) +
       (_maxPrice != null ? 1 : 0);
+
+  bool get _hasSearchCriteria =>
+      (_departure?.trim().isNotEmpty ?? false) ||
+      (_destination?.trim().isNotEmpty ?? false) ||
+      _date != null ||
+      _time != null ||
+      _verifiedDriversOnly ||
+      _maxPrice != null;
 
   void _focusCriteria() {
     final targetContext = _criteriaKey.currentContext;
