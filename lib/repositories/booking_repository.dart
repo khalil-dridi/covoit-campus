@@ -5,6 +5,21 @@ import 'notification_repository.dart';
 class BookingRepository {
   final DatabaseHelper _databaseHelper = DatabaseHelper.instance;
 
+  Future<List<Booking>> getBookingsForAdminTrip(int tripId) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery('''
+      SELECT bookings.id, bookings.trip_id, bookings.passenger_id,
+        bookings.seats_reserved, bookings.status, bookings.created_at, bookings.updated_at,
+        passengers.full_name AS passenger_name,
+        passengers.email AS passenger_email
+      FROM bookings
+      INNER JOIN users AS passengers ON passengers.id = bookings.passenger_id
+      WHERE bookings.trip_id = ?
+      ORDER BY bookings.created_at DESC, bookings.id DESC
+    ''', [tripId]);
+    return rows.map(Booking.fromMap).toList(growable: false);
+  }
+
   Future<List<Booking>> getBookingsForDriverTrip({
     required int tripId,
     required int driverId,

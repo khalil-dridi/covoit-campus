@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../shared/placeholder_page.dart';
 import 'dashboard/admin_dashboard_screen.dart';
+import 'trips/admin_trips_screen.dart';
 import 'users/admin_users_screen.dart';
 
 class AdminShell extends StatefulWidget {
@@ -25,11 +26,7 @@ class _AdminShellState extends State<AdminShell> {
     final List<Widget> pages = [
       AdminDashboardScreen(admin: widget.user),
       AdminUsersScreen(admin: widget.user),
-      const PlaceholderPage(
-        title: 'Trajets',
-        subtitle: 'Gérez les trajets de la plateforme.',
-        icon: Icons.route_outlined,
-      ),
+      AdminTripsScreen(admin: widget.user),
       const PlaceholderPage(
         title: 'Signalements',
         subtitle: 'Traitez les signalements des utilisateurs.',

@@ -24,6 +24,7 @@ class Booking {
   final String? vehicleColor;
   final int? vehicleSeats;
   final String? passengerName;
+  final String? passengerEmail;
   final String? passengerImage;
   final String? passengerUniversity;
 
@@ -53,6 +54,7 @@ class Booking {
     this.vehicleColor,
     this.vehicleSeats,
     this.passengerName,
+    this.passengerEmail,
     this.passengerImage,
     this.passengerUniversity,
   });
@@ -85,6 +87,7 @@ class Booking {
         vehicleColor: map['vehicle_color'] as String?,
         vehicleSeats: map['vehicle_seats'] as int?,
         passengerName: map['passenger_name'] as String?,
+        passengerEmail: map['passenger_email'] as String?,
         passengerImage: map['passenger_image'] as String?,
         passengerUniversity: map['passenger_university'] as String?,
       );

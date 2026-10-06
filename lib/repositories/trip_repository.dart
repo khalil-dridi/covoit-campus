@@ -10,6 +10,71 @@ enum TripSort { earliest, cheapest, bestRated }
 class TripRepository {
   final DatabaseHelper _databaseHelper = DatabaseHelper.instance;
 
+  Future<List<Trip>> getAllTripsForAdmin() async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery('''
+      SELECT trips.*, drivers.full_name AS driver_name,
+        drivers.is_verified AS driver_is_verified,
+        drivers.profile_image AS driver_profile_image,
+        (SELECT AVG(ratings.score) FROM ratings WHERE ratings.reviewed_id = drivers.id) AS driver_rating
+      FROM trips
+      INNER JOIN users AS drivers ON drivers.id = trips.driver_id
+      ORDER BY trips.departure_date DESC, trips.departure_time DESC, trips.id DESC
+    ''');
+    return rows.map(Trip.fromMap).toList(growable: false);
+  }
+
+  Future<int> cancelTripAsAdmin(int tripId) async {
+    final db = await _databaseHelper.database;
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+    final updated = await db.transaction<int>((transaction) async {
+      final rows = await transaction.query(
+        'trips',
+        columns: ['status', 'departure_date', 'departure_time', 'departure', 'destination', 'driver_id'],
+        where: 'id = ?',
+        whereArgs: [tripId],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Trajet introuvable.');
+      final row = rows.first;
+      if (row['status'] != 'available') {
+        throw StateError('Ce trajet ne peut plus être annulé.');
+      }
+      final date = DateTime.tryParse('${row['departure_date']} ${row['departure_time']}');
+      if (date == null || !date.isAfter(now)) {
+        throw StateError('Seuls les trajets à venir peuvent être annulés.');
+      }
+      final count = await transaction.update(
+        'trips',
+        {'status': 'cancelled', 'updated_at': nowIso},
+        where: "id = ? AND status = 'available'",
+        whereArgs: [tripId],
+      );
+      if (count != 1) throw StateError('Le trajet a été modifié entre-temps.');
+      final passengers = await transaction.query(
+        'bookings',
+        columns: ['passenger_id'],
+        where: 'trip_id = ? AND status IN (?, ?)',
+        whereArgs: [tripId, 'pending', 'accepted'],
+      );
+      final route = '${row['departure']} → ${row['destination']}';
+      for (final booking in passengers) {
+        await NotificationRepository.insertInTransaction(
+          transaction: transaction,
+          userId: booking['passenger_id'] as int,
+          title: 'Trajet annulé',
+          body: 'Le trajet $route a été annulé par l’administration.',
+          type: 'trip:$tripId;cancelled',
+          createdAt: nowIso,
+        );
+      }
+      return count;
+    });
+    NotificationRepository.notifyChanged();
+    return updated;
+  }
+
   Future<List<Trip>> searchAvailableTrips({
     required int passengerId,
     String? departure,
