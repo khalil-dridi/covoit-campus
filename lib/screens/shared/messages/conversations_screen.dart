@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../models/user.dart';
+import '../../../models/user_profile_context.dart';
 import '../../../repositories/message_repository.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 import 'chat_screen.dart';
@@ -381,6 +382,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               // ----------------------------------------------------------------
               UserProfileTarget(
                 userId: summary.otherUserId,
+                currentUser: widget.currentUser,
+                profileContext: _profileContext(summary),
                 enabled: widget.currentUser.role == 'passenger',
                 borderRadius: BorderRadius.circular(28),
                 child: _buildAvatar(summary.otherUserName),
@@ -402,6 +405,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                         Expanded(
                           child: UserProfileTarget(
                             userId: summary.otherUserId,
+                            currentUser: widget.currentUser,
+                            profileContext: _profileContext(summary),
                             enabled: widget.currentUser.role == 'passenger',
                             borderRadius: BorderRadius.circular(6),
                             child: Text(
@@ -498,6 +503,17 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       ),
     );
   }
+
+  UserProfileContext _profileContext(ConversationSummary summary) =>
+      UserProfileContext(
+        type: summary.isRideRequest
+            ? UserProfileContextType.conversationRequest
+            : UserProfileContextType.conversationTrip,
+        tripId: summary.tripId,
+        rideRequestId: summary.rideRequestId,
+        departure: summary.tripDeparture,
+        destination: summary.tripDestination,
+      );
 
   // ---------------------------------------------------------------------------
   // Avatar — initials-based fallback consistent with the rest of the app.

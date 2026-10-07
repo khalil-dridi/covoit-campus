@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/booking.dart';
 import '../../../models/user.dart';
+import '../../../models/user_profile_context.dart';
 import '../../../repositories/booking_repository.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 import '../../shared/reporting/report_form_screen.dart';
@@ -174,6 +175,14 @@ class _PassengerBookingDetailsScreenState extends State<PassengerBookingDetailsS
                 if (booking.driverName != null) ...[
                   UserProfileTarget(
                     userId: booking.driverId ?? 0,
+                    currentUser: widget.user,
+                    profileContext: UserProfileContext(
+                      type: UserProfileContextType.booking,
+                      bookingId: booking.id,
+                      tripId: booking.tripId,
+                      departure: booking.departure,
+                      destination: booking.destination,
+                    ),
                     enabled: booking.driverId != null,
                     borderRadius: BorderRadius.circular(10),
                     child: Row(

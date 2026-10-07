@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/trip.dart';
 import '../../../models/user.dart';
+import '../../../models/user_profile_context.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 import '../trips/trip_details_screen.dart';
@@ -401,6 +402,7 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _TripResultCard(
                   trip: trip,
+                  currentUser: widget.user,
                   onDetails: () => _openTripDetails(trip),
                 ),
               )),
@@ -1008,9 +1010,10 @@ class _FilterSheetState extends State<_FilterSheet> {
 
 class _TripResultCard extends StatelessWidget {
   final Trip trip;
+  final User currentUser;
   final VoidCallback onDetails;
 
-  const _TripResultCard({required this.trip, required this.onDetails});
+  const _TripResultCard({required this.trip, required this.currentUser, required this.onDetails});
 
   @override
   Widget build(BuildContext context) {
@@ -1098,6 +1101,13 @@ class _TripResultCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 UserProfileTarget(
                   userId: trip.driverId,
+                  currentUser: currentUser,
+                  profileContext: UserProfileContext(
+                    type: UserProfileContextType.trip,
+                    tripId: trip.id,
+                    departure: trip.departure,
+                    destination: trip.destination,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                   child: Row(
                     children: [

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
+import '../../models/user_profile_context.dart';
 import '../../repositories/driver_profile_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../screens/shared/profile/user_public_profile_screen.dart';
@@ -16,6 +17,8 @@ const _profileMuted = Color(0xFF547080);
 Future<void> showUserProfilePreview({
   required BuildContext context,
   required int userId,
+  required User currentUser,
+  required UserProfileContext profileContext,
 }) async {
   final anchor = context.findRenderObject();
   final overlay = Overlay.of(context).context.findRenderObject();
@@ -72,7 +75,11 @@ Future<void> showUserProfilePreview({
   if (openProfile == true && navigator.mounted) {
     await navigator.push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => UserPublicProfileScreen(userId: user.id!),
+        builder: (_) => UserPublicProfileScreen(
+          userId: user.id!,
+          currentUser: currentUser,
+          contextInfo: profileContext,
+        ),
       ),
     );
   }
@@ -192,6 +199,8 @@ class UserProfilePreview extends StatelessWidget {
 
 class UserProfileTarget extends StatefulWidget {
   final int userId;
+  final User currentUser;
+  final UserProfileContext profileContext;
   final Widget child;
   final bool enabled;
   final BorderRadius? borderRadius;
@@ -199,6 +208,8 @@ class UserProfileTarget extends StatefulWidget {
   const UserProfileTarget({
     super.key,
     required this.userId,
+    required this.currentUser,
+    this.profileContext = const UserProfileContext(),
     required this.child,
     this.enabled = true,
     this.borderRadius,
@@ -223,6 +234,8 @@ class _UserProfileTargetState extends State<UserProfileTarget> {
               showUserProfilePreview(
                 context: anchorContext,
                 userId: widget.userId,
+                currentUser: widget.currentUser,
+                profileContext: widget.profileContext,
               );
             }
           : null,

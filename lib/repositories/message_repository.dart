@@ -79,6 +79,82 @@ class MessageRepository {
 
   static void _notifyChanged() => changes.value++;
 
+  /// Whether the authenticated participants may open a trip conversation.
+  /// This is an advisory UI check; sendMessage repeats the checks inside its
+  /// write transaction before persisting anything.
+  Future<bool> canStartTripConversation({
+    required int tripId,
+    required int currentUserId,
+    required int otherUserId,
+  }) async {
+    if (currentUserId == otherUserId) return false;
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT trips.driver_id, trips.status, current.role AS current_role,
+             other.role AS other_role
+      FROM trips
+      INNER JOIN users AS current ON current.id = ? AND current.is_active = 1
+      INNER JOIN users AS other ON other.id = ? AND other.is_active = 1
+      WHERE trips.id = ? AND trips.status != 'cancelled'
+      LIMIT 1
+    ''',
+      [currentUserId, otherUserId, tripId],
+    );
+    if (rows.isEmpty) return false;
+    final row = rows.first;
+    final driverId = row['driver_id'] as int;
+    final currentRole = row['current_role'];
+    final otherRole = row['other_role'];
+    if (currentUserId == driverId &&
+        currentRole == 'driver' &&
+        otherRole == 'passenger') {
+      final booking = await db.query(
+        'bookings',
+        columns: ['id'],
+        where: 'trip_id = ? AND passenger_id = ? AND status IN (?, ?)',
+        whereArgs: [tripId, otherUserId, 'pending', 'accepted'],
+        limit: 1,
+      );
+      return booking.isNotEmpty;
+    }
+    if (otherUserId == driverId &&
+        otherRole == 'driver' &&
+        currentRole == 'passenger') {
+      final booking = await db.query(
+        'bookings',
+        columns: ['id'],
+        where: 'trip_id = ? AND passenger_id = ? AND status IN (?, ?)',
+        whereArgs: [tripId, currentUserId, 'pending', 'accepted'],
+        limit: 1,
+      );
+      return booking.isNotEmpty;
+    }
+    return false;
+  }
+
+  Future<bool> canStartRideRequestConversation({
+    required int rideRequestId,
+    required int currentUserId,
+    required int otherUserId,
+  }) async {
+    try {
+      final db = await _databaseHelper.database;
+      await _validateRideRequestConversation(
+        executor: db,
+        rideRequestId: rideRequestId,
+        currentUserId: currentUserId,
+        otherUserId: otherUserId,
+      );
+      // The owner can only open an existing thread. For a driver, the request
+      // validator allows the owner-directed thread, which is the intended
+      // contact entry point.
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // =========================================================================
   // 1. sendMessage
   //
@@ -139,7 +215,7 @@ class MessageRepository {
       // 2. Sender must exist and be active.
       final senderRows = await txn.query(
         'users',
-        columns: ['id', 'full_name', 'is_active'],
+        columns: ['id', 'full_name', 'role', 'is_active'],
         where: 'id = ? AND is_active = 1',
         whereArgs: [senderId],
         limit: 1,
@@ -148,11 +224,12 @@ class MessageRepository {
         throw StateError('Le compte expéditeur est invalide ou désactivé.');
       }
       final senderName = senderRows.first['full_name'] as String;
+      final senderRole = senderRows.first['role'] as String;
 
       // 3. Receiver must exist and be active.
       final receiverRows = await txn.query(
         'users',
-        columns: ['id', 'is_active'],
+        columns: ['id', 'role', 'is_active'],
         where: 'id = ? AND is_active = 1',
         whereArgs: [receiverId],
         limit: 1,
@@ -171,6 +248,10 @@ class MessageRepository {
       //   receiver must be the actual trip driver.
 
       if (senderId == driverId) {
+        if (senderRole != 'driver' ||
+            receiverRows.first['role'] != 'passenger') {
+          throw StateError('Cette conversation n’est pas autorisée.');
+        }
         final bookingRows = await txn.query(
           'bookings',
           columns: ['id'],
@@ -184,6 +265,10 @@ class MessageRepository {
           );
         }
       } else {
+        if (senderRole != 'passenger' ||
+            receiverRows.first['role'] != 'driver') {
+          throw StateError('Cette conversation n’est pas autorisée.');
+        }
         final bookingRows = await txn.query(
           'bookings',
           columns: ['id'],
@@ -516,8 +601,15 @@ class MessageRepository {
     required int otherUserId,
   }) async {
     final db = await _databaseHelper.database;
-    final rows = await db.rawQuery(
-      '''
+    return db.transaction<List<Message>>((txn) async {
+      await _validateTripConversation(
+        executor: txn,
+        tripId: tripId,
+        currentUserId: currentUserId,
+        otherUserId: otherUserId,
+      );
+      final rows = await txn.rawQuery(
+        '''
       SELECT id, trip_id, sender_id, receiver_id, message, is_read, created_at
       FROM messages
       WHERE trip_id = ?
@@ -527,9 +619,77 @@ class MessageRepository {
             )
       ORDER BY created_at ASC, id ASC
       ''',
-      [tripId, currentUserId, otherUserId, otherUserId, currentUserId],
+        [tripId, currentUserId, otherUserId, otherUserId, currentUserId],
+      );
+      return rows.map(Message.fromMap).toList(growable: false);
+    });
+  }
+
+  Future<void> _validateTripConversation({
+    required DatabaseExecutor executor,
+    required int tripId,
+    required int currentUserId,
+    required int otherUserId,
+  }) async {
+    if (currentUserId == otherUserId) {
+      throw StateError('Une conversation doit avoir deux participants.');
+    }
+    final trips = await executor.query(
+      'trips',
+      columns: ['driver_id', 'status'],
+      where: 'id = ?',
+      whereArgs: [tripId],
+      limit: 1,
     );
-    return rows.map(Message.fromMap).toList(growable: false);
+    if (trips.isEmpty || trips.first['status'] == 'cancelled') {
+      throw StateError('Ce trajet ne permet plus cette conversation.');
+    }
+    final users = await executor.query(
+      'users',
+      columns: ['id', 'role'],
+      where: 'id IN (?, ?) AND is_active = 1',
+      whereArgs: [currentUserId, otherUserId],
+    );
+    if (users.length != 2) throw StateError('Un participant n’est plus actif.');
+    final roles = {
+      for (final row in users) row['id'] as int: row['role'] as String,
+    };
+    final driverId = trips.first['driver_id'] as int;
+    if (currentUserId == driverId &&
+        roles[currentUserId] == 'driver' &&
+        roles[otherUserId] == 'passenger') {
+      final booking = await executor.query(
+        'bookings',
+        columns: ['id'],
+        where: 'trip_id = ? AND passenger_id = ? AND status IN (?, ?)',
+        whereArgs: [tripId, otherUserId, 'pending', 'accepted'],
+        limit: 1,
+      );
+      if (booking.isEmpty) {
+        throw StateError(
+          'Vous ne pouvez contacter que les passagers ayant réservé ce trajet.',
+        );
+      }
+      return;
+    }
+    if (otherUserId == driverId &&
+        roles[otherUserId] == 'driver' &&
+        roles[currentUserId] == 'passenger') {
+      final booking = await executor.query(
+        'bookings',
+        columns: ['id'],
+        where: 'trip_id = ? AND passenger_id = ? AND status IN (?, ?)',
+        whereArgs: [tripId, currentUserId, 'pending', 'accepted'],
+        limit: 1,
+      );
+      if (booking.isEmpty) {
+        throw StateError(
+          'Vous devez avoir une réservation valide pour contacter le conducteur.',
+        );
+      }
+      return;
+    }
+    throw StateError('Cette conversation n’est pas autorisée.');
   }
 
   // =========================================================================
@@ -621,13 +781,21 @@ class MessageRepository {
     required int otherUserId,
   }) async {
     final db = await _databaseHelper.database;
-    final updated = await db.update(
-      'messages',
-      {'is_read': 1},
-      where:
-          'trip_id = ? AND receiver_id = ? AND sender_id = ? AND is_read = 0',
-      whereArgs: [tripId, currentUserId, otherUserId],
-    );
+    final updated = await db.transaction<int>((txn) async {
+      await _validateTripConversation(
+        executor: txn,
+        tripId: tripId,
+        currentUserId: currentUserId,
+        otherUserId: otherUserId,
+      );
+      return txn.update(
+        'messages',
+        {'is_read': 1},
+        where:
+            'trip_id = ? AND receiver_id = ? AND sender_id = ? AND is_read = 0',
+        whereArgs: [tripId, currentUserId, otherUserId],
+      );
+    });
     if (updated > 0) _notifyChanged();
   }
 
@@ -660,6 +828,12 @@ class MessageRepository {
     required int otherUserId,
   }) async {
     final db = await _databaseHelper.database;
+    await _validateTripConversation(
+      executor: db,
+      tripId: tripId,
+      currentUserId: currentUserId,
+      otherUserId: otherUserId,
+    );
     final rows = await db.rawQuery(
       'SELECT COUNT(*) AS unread_count '
       'FROM messages '

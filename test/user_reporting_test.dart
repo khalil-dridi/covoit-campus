@@ -106,6 +106,18 @@ void main() {
         unrelatedPassenger,
       );
       final selfBooking = await addBooking(selfTrip, passenger);
+      final requestId = await db.insert('ride_requests', {
+        'passenger_id': passenger,
+        'departure': 'Tunis',
+        'destination': 'Sousse',
+        'request_date': '2035-06-10',
+        'request_time': '09:00',
+        'seats_requested': 1,
+        'description': null,
+        'status': 'active',
+        'created_at': now,
+        'updated_at': now,
+      });
 
       addTearDown(() async {
         for (final id in reportIds) {
@@ -120,6 +132,7 @@ void main() {
         for (final id in vehicleIds) {
           await db.delete('vehicles', where: 'id = ?', whereArgs: [id]);
         }
+        await db.delete('ride_requests', where: 'id = ?', whereArgs: [requestId]);
         for (final id in userIds) {
           await db.delete('users', where: 'id = ?', whereArgs: [id]);
         }
@@ -204,6 +217,28 @@ void main() {
             .length,
         2,
       );
+
+      expect(
+        await repository.canCreateProfileReport(
+          reporterId: driver,
+          targetId: passenger,
+          rideRequestId: requestId,
+        ),
+        isTrue,
+      );
+      final requestReportId = await repository.createProfileReport(
+        reporterId: driver,
+        targetId: passenger,
+        rideRequestId: requestId,
+        contextLabel: 'Tunis → Sousse',
+        reason: 'Comportement inapproprié',
+        description: 'Contexte du signalement.',
+      );
+      reportIds.add(requestReportId);
+      final requestReport = await repository.getReportById(requestReportId);
+      expect(requestReport?.tripId, isNull);
+      expect(requestReport?.description, contains('Tunis → Sousse'));
+      expect(requestReport?.description, contains('Contexte du signalement.'));
     },
   );
 }

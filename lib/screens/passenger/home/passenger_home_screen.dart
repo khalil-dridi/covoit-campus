@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/ride_request.dart';
 import '../../../models/trip.dart';
 import '../../../models/user.dart';
+import '../../../models/user_profile_context.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../../repositories/ride_request_repository.dart';
 import '../../../widgets/passenger/passenger_header.dart';
@@ -495,6 +496,18 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                   Expanded(
                     child: UserProfileTarget(
                       userId: profileUserId,
+                      currentUser: widget.user,
+                      profileContext: UserProfileContext(
+                        type: isTrip
+                            ? UserProfileContextType.trip
+                            : UserProfileContextType.rideRequest,
+                        tripId: trip?.id,
+                        rideRequestId: request?.id,
+                        departure: isTrip ? trip.departure : request?.departure,
+                        destination: isTrip
+                            ? trip.destination
+                            : request?.destination,
+                      ),
                       child: Row(
                         children: [
                           _feedAvatar(author, avatar, isTrip),

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/ride_request.dart';
 import '../../../models/user.dart';
+import '../../../models/user_profile_context.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 import '../../shared/messages/chat_screen.dart';
 
@@ -71,7 +72,14 @@ class RideRequestDetailsScreen extends StatelessWidget {
                         Expanded(
                           child: UserProfileTarget(
                             userId: request.passengerId,
-                            enabled: currentUser.role == 'passenger',
+                            currentUser: currentUser,
+                            profileContext: UserProfileContext(
+                              type: UserProfileContextType.rideRequest,
+                              rideRequestId: request.id,
+                              departure: request.departure,
+                              destination: request.destination,
+                            ),
+                            enabled: currentUser.isActive,
                             borderRadius: BorderRadius.circular(14),
                             child: Row(
                               children: [

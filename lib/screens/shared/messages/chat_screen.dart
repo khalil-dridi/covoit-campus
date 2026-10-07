@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/message.dart';
 import '../../../models/user.dart';
+import '../../../models/user_profile_context.dart';
 import '../../../repositories/message_repository.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 
@@ -370,6 +371,16 @@ class _ChatScreenState extends State<ChatScreen> {
           // Avatar placeholder
           UserProfileTarget(
             userId: widget.otherUserId,
+            currentUser: widget.currentUser,
+            profileContext: UserProfileContext(
+              type: widget.rideRequestId != null
+                  ? UserProfileContextType.conversationRequest
+                  : UserProfileContextType.conversationTrip,
+              tripId: widget.tripId,
+              rideRequestId: widget.rideRequestId,
+              departure: widget.tripDeparture ?? widget.requestDeparture,
+              destination: widget.tripDestination ?? widget.requestDestination,
+            ),
             enabled: canInspectProfile,
             borderRadius: BorderRadius.circular(24),
             child: Container(
@@ -393,6 +404,16 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child: UserProfileTarget(
               userId: widget.otherUserId,
+              currentUser: widget.currentUser,
+              profileContext: UserProfileContext(
+                type: widget.rideRequestId != null
+                    ? UserProfileContextType.conversationRequest
+                    : UserProfileContextType.conversationTrip,
+                tripId: widget.tripId,
+                rideRequestId: widget.rideRequestId,
+                departure: widget.tripDeparture ?? widget.requestDeparture,
+                destination: widget.tripDestination ?? widget.requestDestination,
+              ),
               enabled: canInspectProfile,
               borderRadius: BorderRadius.circular(8),
               child: Column(

@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/user.dart';
+import '../../../models/user_profile_context.dart';
 import '../../../repositories/report_repository.dart';
 
 enum ReportFlow { passengerReportsDriver, driverReportsPassenger }
 
 class ReportFormScreen extends StatefulWidget {
   final User reporter;
-  final int bookingId;
+  final int? bookingId;
+  final int? targetUserId;
+  final UserProfileContext? profileContext;
   final ReportFlow flow;
   final String targetName;
   final String routeLabel;
@@ -15,7 +18,9 @@ class ReportFormScreen extends StatefulWidget {
   const ReportFormScreen({
     super.key,
     required this.reporter,
-    required this.bookingId,
+    this.bookingId,
+    this.targetUserId,
+    this.profileContext,
     required this.flow,
     required this.targetName,
     required this.routeLabel,
@@ -234,8 +239,8 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
-          'Trajet',
+        Text(
+          widget.profileContext?.rideRequestId != null ? 'Demande de trajet' : 'Trajet',
           style: TextStyle(
             color: _muted,
             fontSize: 11,
@@ -244,9 +249,9 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          widget.routeLabel.trim().isEmpty
+          (widget.profileContext?.routeLabel ?? widget.routeLabel).trim().isEmpty
               ? 'Trajet associé à la réservation'
-              : widget.routeLabel,
+              : (widget.profileContext?.routeLabel ?? widget.routeLabel),
           style: const TextStyle(
             color: _navy,
             fontSize: 13,
@@ -298,20 +303,33 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
       _error = null;
     });
     try {
-      if (widget.flow == ReportFlow.passengerReportsDriver) {
+      if (widget.profileContext != null && widget.targetUserId != null) {
+        await _repository.createProfileReport(
+          reporterId: reporterId,
+          targetId: widget.targetUserId!,
+          tripId: widget.profileContext!.tripId,
+          bookingId: widget.profileContext!.bookingId ?? widget.bookingId,
+          rideRequestId: widget.profileContext!.rideRequestId,
+          contextLabel: widget.profileContext!.routeLabel,
+          reason: reason,
+          description: _descriptionController.text,
+        );
+      } else if (widget.flow == ReportFlow.passengerReportsDriver && widget.bookingId != null) {
         await _repository.createReportFromPassengerBooking(
           reporterId: reporterId,
-          bookingId: widget.bookingId,
+          bookingId: widget.bookingId!,
+          reason: reason,
+          description: _descriptionController.text,
+        );
+      } else if (widget.flow == ReportFlow.driverReportsPassenger && widget.bookingId != null) {
+        await _repository.createReportFromDriverBooking(
+          reporterId: reporterId,
+          bookingId: widget.bookingId!,
           reason: reason,
           description: _descriptionController.text,
         );
       } else {
-        await _repository.createReportFromDriverBooking(
-          reporterId: reporterId,
-          bookingId: widget.bookingId,
-          reason: reason,
-          description: _descriptionController.text,
-        );
+        throw StateError('Le contexte du signalement est indisponible.');
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);

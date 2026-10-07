@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../database/database_helper.dart';
 import '../../../models/trip_details.dart';
 import '../../../models/user.dart';
+import '../../../models/user_profile_context.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../shared/messages/chat_screen.dart';
@@ -392,6 +393,13 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
         decoration: _cardDecoration(),
         child: UserProfileTarget(
           userId: details.driverId,
+          currentUser: widget.user,
+          profileContext: UserProfileContext(
+            type: UserProfileContextType.trip,
+            tripId: details.id,
+            departure: details.departure,
+            destination: details.destination,
+          ),
           borderRadius: BorderRadius.circular(14),
           child: Row(
           children: [
