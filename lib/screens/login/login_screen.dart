@@ -8,6 +8,7 @@ import '../passenger/passenger_shell.dart';
 import '../driver/driver_shell.dart';
 import '../admin/admin_shell.dart';
 import '../../utils/password_hasher.dart';
+import '../welcome/welcome_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -26,6 +27,25 @@ class _LoginScreenState extends State<LoginScreen> {
   static const Color green = Color(0xFF20B978);
   static const Color background = Color(0xFFF4FFFB);
   static const Color textGrey = Color(0xFF547080);
+
+  void _returnToPreviousScreen() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const WelcomeScreen()),
+      );
+    }
+  }
+
+  void _handleSystemBack(bool didPop) {
+    if (!didPop && !Navigator.of(context).canPop()) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const WelcomeScreen()),
+      );
+    }
+  }
 
   // ==========================================================
   // CONTROLLERS
@@ -446,7 +466,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope<void>(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, _) => _handleSystemBack(didPop),
+      child: Scaffold(
       backgroundColor: background,
 
       body: SafeArea(
@@ -529,11 +552,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius:
                                 BorderRadius.circular(14),
 
-                            onTap: () {
-                              Navigator.pop(
-                                context,
-                              );
-                            },
+                            onTap: _returnToPreviousScreen,
 
                             child:
                                 const SizedBox(
@@ -1131,6 +1150,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

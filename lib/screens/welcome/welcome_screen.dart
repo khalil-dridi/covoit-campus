@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../login/login_screen.dart';
 import '../register/register_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
@@ -52,19 +54,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   void _nextPage() {
-    if (_currentPage < pages.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-    } else {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => const RegisterScreen(),
-    ),
-  );
-}
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _openAuthentication(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   @override
@@ -112,7 +109,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             // BOTTOM AREA
             // ==========================================================
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              padding: EdgeInsets.fromLTRB(
+                24,
+                0,
+                24,
+                MediaQuery.sizeOf(context).height < 700 ? 16 : 24,
+              ),
               child: Column(
                 children: [
                   // ------------------------------------------------------
@@ -120,70 +122,21 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   // ------------------------------------------------------
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      pages.length,
-                      (index) {
-                        final bool isActive = index == _currentPage;
+                    children: List.generate(pages.length, (index) {
+                      final bool isActive = index == _currentPage;
 
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: isActive ? 28 : 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? green
-                                : const Color(0xFFD2E3DD),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(height: 22),
-
-                  // ------------------------------------------------------
-                  // BUTTON
-                  // ------------------------------------------------------
-                  SizedBox(
-                    width: double.infinity,
-                    height: 58,
-                    child: ElevatedButton(
-                      onPressed: _nextPage,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: green,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: isActive ? 28 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: isActive ? green : const Color(0xFFD2E3DD),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _currentPage == pages.length - 1
-                                ? 'Commencer'
-                                : 'Suivant',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Icon(
-                            _currentPage == pages.length - 1
-                                ? Icons.arrow_forward_rounded
-                                : Icons.arrow_forward_rounded,
-                            size: 21,
-                          ),
-                        ],
-                      ),
-                    ),
+                      );
+                    }),
                   ),
-
-                  const SizedBox(height: 12),
 
                   // ------------------------------------------------------
                   // PAGE NUMBER
@@ -196,6 +149,28 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       color: primaryBlue.withValues(alpha: 0.45),
                     ),
                   ),
+                  SizedBox(height: _currentPage == pages.length - 1 ? 16 : 22),
+                  if (_currentPage == pages.length - 1) ...[
+                    _buildActionButton(
+                      label: 'Créer un compte',
+                      icon: Icons.arrow_forward_rounded,
+                      onPressed: () =>
+                          _openAuthentication(const RegisterScreen()),
+                      primary: true,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildActionButton(
+                      label: 'Se connecter',
+                      onPressed: () => _openAuthentication(const LoginScreen()),
+                      primary: false,
+                    ),
+                  ] else
+                    _buildActionButton(
+                      label: 'Suivant',
+                      icon: Icons.arrow_forward_rounded,
+                      onPressed: _nextPage,
+                      primary: true,
+                    ),
                 ],
               ),
             ),
@@ -209,129 +184,175 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   // BUILD ONE ONBOARDING PAGE
   // ==========================================================
   Widget _buildPage(OnboardingData page) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // ----------------------------------------------------------
-          // HERO CARD
-          // ----------------------------------------------------------
-          Container(
-            width: double.infinity,
-            height: 300,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFFE8F9F2),
-                  const Color(0xFFDDEFFC),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(34),
-              border: Border.all(
-                color: Colors.white,
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: primaryBlue.withValues(alpha: 0.08),
-                  blurRadius: 30,
-                  offset: const Offset(0, 15),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // Decorative circle
-                Positioned(
-                  top: -30,
-                  right: -20,
-                  child: Container(
-                    width: 120,
-                    height: 120,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 430;
+        final heroSize = (constraints.maxHeight * 0.48).clamp(
+          compact ? 160.0 : 190.0,
+          300.0,
+        );
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // ----------------------------------------------------------
+                  // HERO CARD
+                  // ----------------------------------------------------------
+                  Container(
+                    width: double.infinity,
+                    height: heroSize,
                     decoration: BoxDecoration(
-                      color: secondaryBlue.withValues(alpha: 0.08),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-
-                // Decorative circle
-                Positioned(
-                  bottom: -30,
-                  left: -25,
-                  child: Container(
-                    width: 110,
-                    height: 110,
-                    decoration: BoxDecoration(
-                      color: green.withValues(alpha: 0.10),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-
-                // Main icon
-                Center(
-                  child: Container(
-                    width: 170,
-                    height: 170,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          const Color(0xFFE8F9F2),
+                          const Color(0xFFDDEFFC),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(34),
+                      border: Border.all(color: Colors.white, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: page.iconColor.withValues(alpha: 0.12),
+                          color: primaryBlue.withValues(alpha: 0.08),
                           blurRadius: 30,
-                          offset: const Offset(0, 12),
+                          offset: const Offset(0, 15),
                         ),
                       ],
                     ),
-                    child: Icon(
-                      page.icon,
-                      size: 90,
-                      color: page.iconColor,
+                    child: Stack(
+                      children: [
+                        // Decorative circle
+                        Positioned(
+                          top: -30,
+                          right: -20,
+                          child: Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              color: secondaryBlue.withValues(alpha: 0.08),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+
+                        // Decorative circle
+                        Positioned(
+                          bottom: -30,
+                          left: -25,
+                          child: Container(
+                            width: 110,
+                            height: 110,
+                            decoration: BoxDecoration(
+                              color: green.withValues(alpha: 0.10),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+
+                        // Main icon
+                        Center(
+                          child: Container(
+                            width: heroSize * 0.57,
+                            height: heroSize * 0.57,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: page.iconColor.withValues(alpha: 0.12),
+                                  blurRadius: 30,
+                                  offset: const Offset(0, 12),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              page.icon,
+                              size: heroSize * 0.30,
+                              color: page.iconColor,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+
+                  SizedBox(height: compact ? 20 : 30),
+
+                  // ----------------------------------------------------------
+                  // TITLE
+                  // ----------------------------------------------------------
+                  Text(
+                    page.title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: primaryBlue,
+                      fontSize: compact ? 26 : 30,
+                      fontWeight: FontWeight.w800,
+                      height: 1.12,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // ----------------------------------------------------------
+                  // DESCRIPTION
+                  // ----------------------------------------------------------
+                  Text(
+                    page.description,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF456477),
+                      fontSize: compact ? 14 : 15,
+                      height: 1.55,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+        );
+      },
+    );
+  }
 
-          const SizedBox(height: 34),
-
-          // ----------------------------------------------------------
-          // TITLE
-          // ----------------------------------------------------------
-          Text(
-            page.title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: primaryBlue,
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              height: 1.12,
-              letterSpacing: -0.5,
-            ),
+  Widget _buildActionButton({
+    required String label,
+    required VoidCallback onPressed,
+    required bool primary,
+    IconData? icon,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: primary ? green : Colors.white,
+          foregroundColor: primary ? Colors.white : secondaryBlue,
+          side: BorderSide(color: primary ? green : const Color(0xFFD6E2E8)),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
-
-          const SizedBox(height: 16),
-
-          // ----------------------------------------------------------
-          // DESCRIPTION
-          // ----------------------------------------------------------
-          Text(
-            page.description,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF456477),
-              fontSize: 15,
-              height: 1.55,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label),
+            if (icon != null) ...[
+              const SizedBox(width: 10),
+              Icon(icon, size: 20),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import '../../models/user.dart';
 import '../../repositories/user_repository.dart';
 import '../verification/email_verification_screen.dart';
 import '../../utils/password_hasher.dart';
+import '../welcome/welcome_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -23,6 +24,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
   static const Color green = Color(0xFF20B978);
   static const Color background = Color(0xFFF4FFFB);
   static const Color textGrey = Color(0xFF547080);
+
+  void _returnToPreviousScreen() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const WelcomeScreen()),
+      );
+    }
+  }
+
+  void _handleSystemBack(bool didPop) {
+    if (!didPop && !Navigator.of(context).canPop()) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const WelcomeScreen()),
+      );
+    }
+  }
 
   // ==========================================================
   // CONTROLLERS
@@ -471,7 +491,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope<void>(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, _) => _handleSystemBack(didPop),
+      child: Scaffold(
       backgroundColor: background,
       body: SafeArea(
         child: Stack(
@@ -539,9 +562,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           child: InkWell(
                             borderRadius:
                                 BorderRadius.circular(14),
-                            onTap: () {
-                              Navigator.pop(context);
-                            },
+                            onTap: _returnToPreviousScreen,
                             child: const SizedBox(
                               width: 46,
                               height: 46,
@@ -1174,6 +1195,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
