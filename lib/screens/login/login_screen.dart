@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
@@ -216,7 +218,9 @@ class _LoginScreenState extends State<LoginScreen> {
         isLoggingIn = false;
       });
 
-      _showLoginSuccessDialog(user);
+      await _showLoginSuccessOverlay();
+      if (!mounted) return;
+      _navigateToRoleShell(user);
     } catch (e) {
       if (!mounted) return;
 
@@ -235,142 +239,33 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ==========================================================
-  // SUCCESS DIALOG
+  // SUCCESS TRANSITION
   // ==========================================================
 
-  void _showLoginSuccessDialog(User user) {
-    final bool isDriver = user.role == 'driver';
-
-    showDialog(
+  Future<void> _showLoginSuccessOverlay() {
+    return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          contentPadding:
-              const EdgeInsets.all(28),
-
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color:
-                      green.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isDriver
-                      ? Icons.directions_car_rounded
-                      : Icons.backpack_rounded,
-                  color: green,
-                  size: 38,
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              const Text(
-                'Connexion réussie !',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: primaryBlue,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              Text(
-                'Bienvenue ${user.fullName}.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: textGrey,
-                  fontSize: 14,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Text(
-                isDriver
-                    ? 'Vous êtes connecté en tant que conducteur.'
-                    : 'Vous êtes connecté en tant que passager.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color:
-                      textGrey.withValues(alpha: 0.75),
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-  Navigator.pop(context);
-
-  if (user.role == 'passenger') {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PassengerShell(
-  user: user,
-),
-      ),
-      (route) => false,
-    );
-  } else if (user.role == 'driver') {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (context) => DriverShell(user: user),
-      ),
-      (route) => false,
-    );
-  } else if (user.role == 'admin') {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AdminShell(user: user),
-      ),
-      (route) => false,
+      barrierColor: primaryBlue.withValues(alpha: 0.28),
+      builder: (_) => const _LoginSuccessOverlay(),
     );
   }
-},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: green,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text(
-                    'Continuer',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight:
-                          FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+
+  void _navigateToRoleShell(User user) {
+    final Widget destination;
+    if (user.role == 'passenger') {
+      destination = PassengerShell(user: user);
+    } else if (user.role == 'driver') {
+      destination = DriverShell(user: user);
+    } else if (user.role == 'admin') {
+      destination = AdminShell(user: user);
+    } else {
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil<void>(
+      MaterialPageRoute<void>(builder: (_) => destination),
+      (route) => false,
     );
   }
 
@@ -1151,6 +1046,105 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
+      ),
+    );
+  }
+}
+
+class _LoginSuccessOverlay extends StatefulWidget {
+  const _LoginSuccessOverlay();
+
+  @override
+  State<_LoginSuccessOverlay> createState() => _LoginSuccessOverlayState();
+}
+
+class _LoginSuccessOverlayState extends State<_LoginSuccessOverlay> {
+  static const Color primaryBlue = Color(0xFF123D68);
+  static const Color green = Color(0xFF20B978);
+  static const Color textGrey = Color(0xFF547080);
+
+  late final Timer _dismissTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _dismissTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  @override
+  void dispose() {
+    _dismissTimer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope<void>(
+      canPop: false,
+      child: Dialog(
+        backgroundColor: Colors.white,
+        elevation: 12,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 300),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 26),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: green.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: green,
+                    size: 34,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Connexion réussie',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: primaryBlue,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  'Redirection vers votre espace...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: textGrey.withValues(alpha: 0.8),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Semantics(
+                  label: 'Redirection en cours',
+                  child: SizedBox(
+                    width: 25,
+                    height: 25,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: green,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
