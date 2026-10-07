@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
-import '../shared/placeholder_page.dart';
 import 'dashboard/admin_dashboard_screen.dart';
 import 'trips/admin_trips_screen.dart';
 import 'users/admin_users_screen.dart';
 import 'profile/admin_profile_screen.dart';
+import 'reports/admin_reports_screen.dart';
 
 class AdminShell extends StatefulWidget {
   final User user;
@@ -35,11 +35,7 @@ class _AdminShellState extends State<AdminShell> {
       AdminDashboardScreen(admin: _admin),
       AdminUsersScreen(admin: _admin),
       AdminTripsScreen(admin: _admin),
-      const PlaceholderPage(
-        title: 'Signalements',
-        subtitle: 'Traitez les signalements des utilisateurs.',
-        icon: Icons.report_problem_outlined,
-      ),
+      AdminReportsScreen(admin: _admin),
       AdminProfileScreen(
         admin: _admin,
         onUserUpdated: (user) => setState(() => _admin = user),
