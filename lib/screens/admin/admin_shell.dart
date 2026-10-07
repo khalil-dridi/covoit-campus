@@ -5,6 +5,7 @@ import '../shared/placeholder_page.dart';
 import 'dashboard/admin_dashboard_screen.dart';
 import 'trips/admin_trips_screen.dart';
 import 'users/admin_users_screen.dart';
+import 'profile/admin_profile_screen.dart';
 
 class AdminShell extends StatefulWidget {
   final User user;
@@ -20,22 +21,28 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _currentIndex = 0;
+  late User _admin;
+
+  @override
+  void initState() {
+    super.initState();
+    _admin = widget.user;
+  }
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
-      AdminDashboardScreen(admin: widget.user),
-      AdminUsersScreen(admin: widget.user),
-      AdminTripsScreen(admin: widget.user),
+      AdminDashboardScreen(admin: _admin),
+      AdminUsersScreen(admin: _admin),
+      AdminTripsScreen(admin: _admin),
       const PlaceholderPage(
         title: 'Signalements',
         subtitle: 'Traitez les signalements des utilisateurs.',
         icon: Icons.report_problem_outlined,
       ),
-      const PlaceholderPage(
-        title: 'Profil',
-        subtitle: 'Gérez votre compte administrateur.',
-        icon: Icons.admin_panel_settings_outlined,
+      AdminProfileScreen(
+        admin: _admin,
+        onUserUpdated: (user) => setState(() => _admin = user),
       ),
     ];
 

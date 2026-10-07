@@ -53,6 +53,35 @@ class UserRepository {
     return User.fromMap(result.first);
   }
 
+  Future<User?> getUserById(int userId) async {
+    final db = await _databaseHelper.database;
+    final result = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    return result.isEmpty ? null : User.fromMap(result.first);
+  }
+
+  Future<bool> changeAdminPassword({
+    required int userId,
+    required String currentPasswordHash,
+    required String newPasswordHash,
+  }) async {
+    final db = await _databaseHelper.database;
+    final changed = await db.update(
+      'users',
+      {
+        'password_hash': newPasswordHash,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ? AND role = ? AND is_active = 1 AND password_hash = ?',
+      whereArgs: [userId, 'admin', currentPasswordHash],
+    );
+    return changed == 1;
+  }
+
   Future<int> verifyUser(int userId) async {
     final db = await _databaseHelper.database;
 
@@ -89,6 +118,30 @@ class UserRepository {
       },
       where: 'id = ?',
       whereArgs: [userId],
+    );
+  }
+
+  Future<int> updateAdminProfile({
+    required int userId,
+    required String fullName,
+    String? phone,
+    String? university,
+  }) async {
+    final db = await _databaseHelper.database;
+    return db.update(
+      'users',
+      {
+        'full_name': fullName.trim(),
+        'phone': phone?.trim().isNotEmpty == true
+            ? phone!.trim()
+            : null,
+        'university': university?.trim().isNotEmpty == true
+            ? university!.trim()
+            : null,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ? AND role = ? AND is_active = 1',
+      whereArgs: [userId, 'admin'],
     );
   }
 

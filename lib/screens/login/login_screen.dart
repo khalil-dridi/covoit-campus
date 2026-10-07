@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
@@ -10,6 +7,7 @@ import '../register/register_screen.dart';
 import '../passenger/passenger_shell.dart';
 import '../driver/driver_shell.dart';
 import '../admin/admin_shell.dart';
+import '../../utils/password_hasher.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -68,13 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
   // ==========================================================
   // PASSWORD HASH
   // ==========================================================
-
-  String _hashPassword(String password) {
-    final bytes = utf8.encode(password);
-    final digest = sha256.convert(bytes);
-
-    return digest.toString();
-  }
 
   // ==========================================================
   // EMAIL VALIDATION
@@ -166,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // PASSWORD
       // --------------------------------------------------------
 
-      final passwordHash = _hashPassword(password);
+      final passwordHash = hashPassword(password);
 
       if (passwordHash != user.passwordHash) {
         setState(() {

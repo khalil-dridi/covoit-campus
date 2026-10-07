@@ -1,12 +1,10 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 
 import '../login/login_screen.dart';
 import '../../models/user.dart';
 import '../../repositories/user_repository.dart';
 import '../verification/email_verification_screen.dart';
+import '../../utils/password_hasher.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -85,13 +83,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // ==========================================================
   // PASSWORD HASH
   // ==========================================================
-
-  String _hashPassword(String password) {
-    final bytes = utf8.encode(password);
-    final digest = sha256.convert(bytes);
-
-    return digest.toString();
-  }
 
   // ==========================================================
   // EMAIL VALIDATION
@@ -213,7 +204,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final user = User(
         fullName: fullName,
         email: email,
-        passwordHash: _hashPassword(password),
+        passwordHash: hashPassword(password),
         role: selectedRole,
         isVerified: false,
         isActive: true,
