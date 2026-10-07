@@ -367,7 +367,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       ],
     ),
     child: InkWell(
-      onTap: () => _openDetails(report.id),
+      onTap: () => _openDetails(report.id!),
       borderRadius: BorderRadius.circular(18),
       child: Padding(
         padding: const EdgeInsets.all(15),

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/booking.dart';
 import '../../../models/user.dart';
 import '../../../repositories/booking_repository.dart';
+import '../../shared/reporting/report_form_screen.dart';
 
 class PassengerBookingDetailsScreen extends StatefulWidget {
   final int bookingId;
@@ -123,6 +124,7 @@ class _PassengerBookingDetailsScreenState extends State<PassengerBookingDetailsS
         booking.tripStatus == 'available' &&
         tripDate != null &&
         tripDate.isAfter(DateTime.now());
+    final canReport = booking.status == 'pending' || booking.status == 'accepted';
     final total = (booking.pricePerSeat ?? 0) * booking.seatsReserved;
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -222,8 +224,47 @@ class _PassengerBookingDetailsScreenState extends State<PassengerBookingDetailsS
               ),
             ),
           ],
+          if (canReport) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: () => _openReport(booking),
+                icon: const Icon(Icons.flag_outlined, size: 18),
+                label: const Text('Signaler un problème'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: secondaryBlue,
+                  side: const BorderSide(color: Color(0xFFDCE7E3)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Future<void> _openReport(Booking booking) async {
+    final bookingId = booking.id;
+    if (bookingId == null || widget.user.role != 'passenger') return;
+    final route = '${booking.departure ?? 'Départ'} → ${booking.destination ?? 'Destination'}';
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => ReportFormScreen(
+          reporter: widget.user,
+          bookingId: bookingId,
+          flow: ReportFlow.passengerReportsDriver,
+          targetName: booking.driverName ?? 'Conducteur',
+          routeLabel: route,
+        ),
+      ),
+    );
+    if (!mounted || submitted != true) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Votre signalement a été envoyé.')),
     );
   }
 

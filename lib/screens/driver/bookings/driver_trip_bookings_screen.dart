@@ -6,6 +6,7 @@ import '../../../models/user.dart';
 import '../../../repositories/booking_repository.dart';
 import '../../shared/messages/chat_screen.dart';
 import '../../shared/notifications_screen.dart';
+import '../../shared/reporting/report_form_screen.dart';
 
 class DriverTripBookingsScreen extends StatefulWidget {
   final int tripId;
@@ -211,9 +212,49 @@ class _DriverTripBookingsScreenState extends State<DriverTripBookingsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: booking.id == null || _workingBookingId == booking.id
+                    ? null
+                    : () => _openReport(booking),
+                icon: const Icon(Icons.flag_outlined, size: 16),
+                label: const Text('Signaler ce passager'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: secondaryBlue,
+                  side: const BorderSide(color: Color(0xFFDCE7E3)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
           ],
         ],
       ),
+    );
+  }
+
+  Future<void> _openReport(Booking booking) async {
+    final bookingId = booking.id;
+    if (bookingId == null || widget.user.id == null || widget.user.role != 'driver') {
+      return;
+    }
+    final route = '${booking.departure ?? 'Départ'} → ${booking.destination ?? 'Destination'}';
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => ReportFormScreen(
+          reporter: widget.user,
+          bookingId: bookingId,
+          flow: ReportFlow.driverReportsPassenger,
+          targetName: booking.passengerName ?? 'Passager',
+          routeLabel: route,
+        ),
+      ),
+    );
+    if (!mounted || submitted != true) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Votre signalement a été envoyé.')),
     );
   }
 

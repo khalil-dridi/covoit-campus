@@ -1,5 +1,5 @@
 class Report {
-  final int id;
+  final int? id;
   final int reporterId;
   final int? reportedUserId;
   final int? tripId;
@@ -17,7 +17,7 @@ class Report {
   final String? tripTime;
 
   const Report({
-    required this.id,
+    this.id,
     required this.reporterId,
     required this.reportedUserId,
     required this.tripId,
@@ -36,7 +36,7 @@ class Report {
   });
 
   factory Report.fromMap(Map<String, Object?> map) => Report(
-    id: map['id'] as int,
+    id: map['id'] as int?,
     reporterId: map['reporter_id'] as int,
     reportedUserId: map['reported_user_id'] as int?,
     tripId: map['trip_id'] as int?,
@@ -53,6 +53,16 @@ class Report {
     tripDate: map['trip_date'] as String?,
     tripTime: map['trip_time'] as String?,
   );
+
+  Map<String, Object?> toMap() => {
+    'reporter_id': reporterId,
+    'reported_user_id': reportedUserId,
+    'trip_id': tripId,
+    'reason': reason,
+    'description': description,
+    'status': status,
+    'created_at': createdAt,
+  };
 }
 
 class ReportCounts {
