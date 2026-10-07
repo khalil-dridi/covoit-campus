@@ -186,6 +186,18 @@ class PassengerHeader extends StatelessWidget {
 
     return PopupMenuButton<_PassengerHeaderAction>(
       tooltip: 'Profil et compte',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 6),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 210, maxWidth: 240),
+      color: Colors.white,
+      elevation: 12,
+      shadowColor: primaryBlue.withValues(alpha: 0.16),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFE2EBE7)),
+      ),
       onSelected: (action) {
         if (action == _PassengerHeaderAction.logout) {
           unawaited(LogoutFlow.confirmAndLogout(context));
@@ -200,20 +212,17 @@ class PassengerHeader extends StatelessWidget {
       itemBuilder: (_) => const [
         PopupMenuItem(
           value: _PassengerHeaderAction.profile,
+          height: 52,
+          padding: EdgeInsets.symmetric(horizontal: 14),
           child: _PassengerHeaderMenuItem(
             icon: Icons.person_outline_rounded,
             label: 'Mon profil',
           ),
         ),
         PopupMenuItem(
-          value: _PassengerHeaderAction.mode,
-          child: _PassengerHeaderMenuItem(
-            icon: Icons.swap_horiz_rounded,
-            label: 'Changer de mode',
-          ),
-        ),
-        PopupMenuItem(
           value: _PassengerHeaderAction.logout,
+          height: 52,
+          padding: EdgeInsets.symmetric(horizontal: 14),
           child: _PassengerHeaderMenuItem(
             icon: Icons.logout_rounded,
             label: 'Se déconnecter',
@@ -254,7 +263,7 @@ class PassengerHeader extends StatelessWidget {
   }
 }
 
-enum _PassengerHeaderAction { profile, mode, logout }
+enum _PassengerHeaderAction { profile, logout }
 
 class _PassengerHeaderMenuItem extends StatelessWidget {
   final IconData icon;
@@ -270,17 +279,25 @@ class _PassengerHeaderMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
         children: [
-          Icon(
-            icon,
-            size: 20,
-            color: destructive ? const Color(0xFFD87532) : PassengerHeader.primaryBlue,
+          SizedBox(
+            width: 22,
+            child: Icon(
+              icon,
+              size: 20,
+              color: destructive
+                  ? const Color(0xFFD87532)
+                  : PassengerHeader.primaryBlue,
+            ),
           ),
           const SizedBox(width: 12),
           Text(
             label,
             style: TextStyle(
-              color: destructive ? const Color(0xFFD87532) : const Color(0xFF243B4B),
-              fontWeight: destructive ? FontWeight.w700 : FontWeight.w500,
+              color: destructive
+                  ? const Color(0xFFD87532)
+                  : PassengerHeader.primaryBlue,
+              fontSize: 14,
+              fontWeight: destructive ? FontWeight.w700 : FontWeight.w600,
             ),
           ),
         ],

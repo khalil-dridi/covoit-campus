@@ -202,6 +202,18 @@ class DriverHeader extends StatelessWidget {
 
     return PopupMenuButton<_DriverHeaderAction>(
       tooltip: 'Profil et compte',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 6),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 210, maxWidth: 240),
+      color: Colors.white,
+      elevation: 12,
+      shadowColor: primaryBlue.withValues(alpha: 0.16),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFE2EBE7)),
+      ),
       onSelected: (action) {
         if (action == _DriverHeaderAction.logout) {
           unawaited(LogoutFlow.confirmAndLogout(context));
@@ -216,27 +228,17 @@ class DriverHeader extends StatelessWidget {
       itemBuilder: (_) => const [
         PopupMenuItem(
           value: _DriverHeaderAction.profile,
+          height: 52,
+          padding: EdgeInsets.symmetric(horizontal: 14),
           child: _DriverHeaderMenuItem(
             icon: Icons.person_outline_rounded,
             label: 'Mon profil',
           ),
         ),
         PopupMenuItem(
-          value: _DriverHeaderAction.vehicle,
-          child: _DriverHeaderMenuItem(
-            icon: Icons.directions_car_outlined,
-            label: 'Mon véhicule',
-          ),
-        ),
-        PopupMenuItem(
-          value: _DriverHeaderAction.mode,
-          child: _DriverHeaderMenuItem(
-            icon: Icons.swap_horiz_rounded,
-            label: 'Changer de mode',
-          ),
-        ),
-        PopupMenuItem(
           value: _DriverHeaderAction.logout,
+          height: 52,
+          padding: EdgeInsets.symmetric(horizontal: 14),
           child: _DriverHeaderMenuItem(
             icon: Icons.logout_rounded,
             label: 'Se déconnecter',
@@ -271,7 +273,7 @@ class DriverHeader extends StatelessWidget {
       );
 }
 
-enum _DriverHeaderAction { profile, vehicle, mode, logout }
+enum _DriverHeaderAction { profile, logout }
 
 class _DriverHeaderMenuItem extends StatelessWidget {
   final IconData icon;
@@ -287,17 +289,25 @@ class _DriverHeaderMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
         children: [
-          Icon(
-            icon,
-            size: 20,
-            color: destructive ? const Color(0xFFD87532) : DriverHeader.primaryBlue,
+          SizedBox(
+            width: 22,
+            child: Icon(
+              icon,
+              size: 20,
+              color: destructive
+                  ? const Color(0xFFD87532)
+                  : DriverHeader.primaryBlue,
+            ),
           ),
           const SizedBox(width: 12),
           Text(
             label,
             style: TextStyle(
-              color: destructive ? const Color(0xFFD87532) : const Color(0xFF243B4B),
-              fontWeight: destructive ? FontWeight.w700 : FontWeight.w500,
+              color: destructive
+                  ? const Color(0xFFD87532)
+                  : DriverHeader.primaryBlue,
+              fontSize: 14,
+              fontWeight: destructive ? FontWeight.w700 : FontWeight.w600,
             ),
           ),
         ],
