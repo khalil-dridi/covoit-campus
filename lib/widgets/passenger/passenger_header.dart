@@ -10,11 +10,15 @@ import '../shared/notification_bell.dart';
 class PassengerHeader extends StatelessWidget {
   final User user;
   final VoidCallback? onNotificationTap;
+  final bool compact;
+  final bool showHeroBackground;
 
   const PassengerHeader({
     super.key,
     required this.user,
     this.onNotificationTap,
+    this.compact = false,
+    this.showHeroBackground = true,
   });
 
   static const Color primaryBlue = Color(0xFF123D68);
@@ -29,6 +33,18 @@ class PassengerHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Row(
+        children: [
+          Expanded(child: _buildBrand()),
+          const SizedBox(width: 12),
+          _buildNotificationButton(),
+          const SizedBox(width: 10),
+          _buildAvatar(context),
+        ],
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(30),
       child: SizedBox(
@@ -37,11 +53,14 @@ class PassengerHeader extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset(
-              'assets/images/back1.png',
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-            ),
+            if (showHeroBackground)
+              Image.asset(
+                'assets/images/back1.png',
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+              )
+            else
+              const ColoredBox(color: Color(0xFFF4FFFB)),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
               child: Column(

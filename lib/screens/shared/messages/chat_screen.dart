@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/message.dart';
 import '../../../models/user.dart';
 import '../../../repositories/message_repository.dart';
+import '../../../widgets/profile/user_profile_preview.dart';
 
 // =============================================================================
 // ChatScreen
@@ -337,6 +338,7 @@ class _ChatScreenState extends State<ChatScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildHeader() {
+    final canInspectProfile = widget.currentUser.role == 'passenger';
     final hasTripContext =
         (widget.tripDeparture?.trim().isNotEmpty == true) &&
         (widget.tripDestination?.trim().isNotEmpty == true);
@@ -366,17 +368,22 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(width: 4),
 
           // Avatar placeholder
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: _lightBlue,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.person_rounded,
-              color: _secondaryBlue,
-              size: 22,
+          UserProfileTarget(
+            userId: widget.otherUserId,
+            enabled: canInspectProfile,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: _lightBlue,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.person_rounded,
+                color: _secondaryBlue,
+                size: 22,
+              ),
             ),
           ),
 
@@ -384,10 +391,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
           // Name + trip context
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: UserProfileTarget(
+              userId: widget.otherUserId,
+              enabled: canInspectProfile,
+              borderRadius: BorderRadius.circular(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 Text(
                   widget.otherUserName,
                   maxLines: 1,
@@ -434,7 +445,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                 ],
-              ],
+                ],
+              ),
             ),
           ),
         ],

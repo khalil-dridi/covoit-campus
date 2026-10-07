@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/user.dart';
 import '../../../repositories/message_repository.dart';
+import '../../../widgets/profile/user_profile_preview.dart';
 import 'chat_screen.dart';
 
 // =============================================================================
@@ -378,7 +379,12 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               // ----------------------------------------------------------------
               // Avatar
               // ----------------------------------------------------------------
-              _buildAvatar(summary.otherUserName),
+              UserProfileTarget(
+                userId: summary.otherUserId,
+                enabled: widget.currentUser.role == 'passenger',
+                borderRadius: BorderRadius.circular(28),
+                child: _buildAvatar(summary.otherUserName),
+              ),
 
               const SizedBox(width: 12),
 
@@ -394,16 +400,21 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
-                          child: Text(
-                            summary.otherUserName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: _primaryBlue,
-                              fontSize: 14,
-                              fontWeight: hasUnread
-                                  ? FontWeight.w800
-                                  : FontWeight.w700,
+                          child: UserProfileTarget(
+                            userId: summary.otherUserId,
+                            enabled: widget.currentUser.role == 'passenger',
+                            borderRadius: BorderRadius.circular(6),
+                            child: Text(
+                              summary.otherUserName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: _primaryBlue,
+                                fontSize: 14,
+                                fontWeight: hasUnread
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),

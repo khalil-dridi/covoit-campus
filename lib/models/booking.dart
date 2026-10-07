@@ -17,6 +17,7 @@ class Booking {
   final String? meetingPoint;
   final String? description;
   final String? driverName;
+  final int? driverId;
   final bool? driverIsVerified;
   final String? driverProfileImage;
   final String? vehicleBrand;
@@ -47,6 +48,7 @@ class Booking {
     this.meetingPoint,
     this.description,
     this.driverName,
+    this.driverId,
     this.driverIsVerified,
     this.driverProfileImage,
     this.vehicleBrand,
@@ -78,6 +80,7 @@ class Booking {
         meetingPoint: map['meeting_point'] as String?,
         description: map['description'] as String?,
         driverName: map['driver_name'] as String?,
+        driverId: map['driver_id'] as int?,
         driverIsVerified: map['driver_is_verified'] == null
             ? null
             : map['driver_is_verified'] == 1,

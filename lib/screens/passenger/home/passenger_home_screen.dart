@@ -7,6 +7,7 @@ import '../../../models/user.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../../repositories/ride_request_repository.dart';
 import '../../../widgets/passenger/passenger_header.dart';
+import '../../../widgets/profile/user_profile_preview.dart';
 import '../trips/trip_details_screen.dart';
 import '../requests/ride_request_form_screen.dart';
 import '../requests/ride_request_details_screen.dart';
@@ -430,6 +431,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final trip = post.trip;
     final request = post.request;
     final isTrip = trip != null;
+    final profileUserId = trip?.driverId ?? request!.passengerId;
     final author = isTrip
         ? (trip.driverName.trim().isEmpty ? 'Conducteur' : trip.driverName)
         : (request?.passengerName?.trim().isNotEmpty == true
@@ -490,33 +492,42 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
             children: [
               Row(
                 children: [
-                  _feedAvatar(author, avatar, isTrip),
-                  const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          author,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: primaryBlue,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                    child: UserProfileTarget(
+                      userId: profileUserId,
+                      child: Row(
+                        children: [
+                          _feedAvatar(author, avatar, isTrip),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  author,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: primaryBlue,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${isTrip ? 'Conducteur' : 'Recherche un trajet'} · ${_publicationLabel(post.publishedAt)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: textGrey,
+                                    fontSize: 10.5,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '${isTrip ? 'Conducteur' : 'Recherche un trajet'} · ${_publicationLabel(post.publishedAt)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: textGrey,
-                            fontSize: 10.5,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),

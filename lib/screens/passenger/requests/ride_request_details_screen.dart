@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/ride_request.dart';
 import '../../../models/user.dart';
+import '../../../widgets/profile/user_profile_preview.dart';
 import '../../shared/messages/chat_screen.dart';
 
 class RideRequestDetailsScreen extends StatelessWidget {
@@ -65,33 +66,45 @@ class RideRequestDetailsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      _passengerAvatar(author, request.passengerImage),
-                      const SizedBox(width: 11),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              author,
-                              style: const TextStyle(
-                                color: _blue,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                              ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: UserProfileTarget(
+                            userId: request.passengerId,
+                            enabled: currentUser.role == 'passenger',
+                            borderRadius: BorderRadius.circular(14),
+                            child: Row(
+                              children: [
+                                _passengerAvatar(author, request.passengerImage),
+                                const SizedBox(width: 11),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        author,
+                                        style: const TextStyle(
+                                          color: _blue,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      const Text(
+                                        'Recherche un trajet',
+                                        style: TextStyle(color: _muted, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 3),
-                            const Text(
-                              'Recherche un trajet',
-                              style: TextStyle(color: _muted, fontSize: 12),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                      _statusBadge(request.status),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        _statusBadge(request.status),
+                      ],
+                    ),
                   const SizedBox(height: 22),
                   Text(
                     '${request.departure} → ${request.destination}',

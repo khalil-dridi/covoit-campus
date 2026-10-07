@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../database/database_helper.dart';
 import '../../../models/trip_details.dart';
 import '../../../models/user.dart';
+import '../../../widgets/profile/user_profile_preview.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../shared/messages/chat_screen.dart';
 
@@ -389,7 +390,10 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(15),
         decoration: _cardDecoration(),
-        child: Row(
+        child: UserProfileTarget(
+          userId: details.driverId,
+          borderRadius: BorderRadius.circular(14),
+          child: Row(
           children: [
             _profileAvatar(details.driverProfileImage),
             const SizedBox(width: 13),
@@ -457,6 +461,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               ),
             ),
           ],
+          ),
         ),
       );
 

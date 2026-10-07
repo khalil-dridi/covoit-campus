@@ -64,6 +64,17 @@ class UserRepository {
     return result.isEmpty ? null : User.fromMap(result.first);
   }
 
+  Future<User?> getActiveUserById(int userId) async {
+    final db = await _databaseHelper.database;
+    final result = await db.query(
+      'users',
+      where: 'id = ? AND is_active = 1',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    return result.isEmpty ? null : User.fromMap(result.first);
+  }
+
   Future<bool> changeAdminPassword({
     required int userId,
     required String currentPasswordHash,

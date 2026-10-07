@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/trip.dart';
 import '../../../models/user.dart';
 import '../../../repositories/trip_repository.dart';
+import '../../../widgets/profile/user_profile_preview.dart';
 import '../trips/trip_details_screen.dart';
 import '../../../widgets/passenger/passenger_header.dart';
 
@@ -69,6 +70,8 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
             children: [
               PassengerHeader(
                 user: widget.user,
+                compact: true,
+                showHeroBackground: false,
               ),
               const SizedBox(height: 22),
               const Text(
@@ -1093,8 +1096,11 @@ class _TripResultCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
+                UserProfileTarget(
+                  userId: trip.driverId,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Row(
+                    children: [
                     _DriverAvatar(image: trip.driverProfileImage),
                     const SizedBox(width: 7),
                     Flexible(
@@ -1127,7 +1133,8 @@ class _TripResultCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),

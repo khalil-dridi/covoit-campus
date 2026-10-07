@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/booking.dart';
 import '../../../models/user.dart';
 import '../../../repositories/booking_repository.dart';
+import '../../../widgets/profile/user_profile_preview.dart';
 import '../../shared/reporting/report_form_screen.dart';
 
 class PassengerBookingDetailsScreen extends StatefulWidget {
@@ -171,14 +172,19 @@ class _PassengerBookingDetailsScreenState extends State<PassengerBookingDetailsS
               icon: Icons.directions_car_rounded,
               children: [
                 if (booking.driverName != null) ...[
-                  Row(
-                    children: [
+                  UserProfileTarget(
+                    userId: booking.driverId ?? 0,
+                    enabled: booking.driverId != null,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Row(
+                      children: [
                       const Icon(Icons.person_outline_rounded, color: secondaryBlue, size: 18),
                       const SizedBox(width: 8),
                       Expanded(child: Text(booking.driverName!, style: const TextStyle(color: primaryBlue, fontSize: 13, fontWeight: FontWeight.w700))),
                       if (booking.driverIsVerified == true)
                         const Icon(Icons.verified_rounded, color: green, size: 17),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 10),
                 ],
