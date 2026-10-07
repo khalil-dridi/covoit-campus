@@ -5,9 +5,26 @@ import 'notification_repository.dart';
 class BookingRepository {
   final DatabaseHelper _databaseHelper = DatabaseHelper.instance;
 
+  Future<int> getCompletedPassengerTripCount(int passengerId) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT COUNT(DISTINCT bookings.trip_id) AS trip_count
+      FROM bookings
+      INNER JOIN trips ON trips.id = bookings.trip_id
+      WHERE bookings.passenger_id = ?
+        AND bookings.status = 'accepted'
+        AND trips.status = 'completed'
+    ''',
+      [passengerId],
+    );
+    return rows.first['trip_count'] as int? ?? 0;
+  }
+
   Future<List<Booking>> getBookingsForAdminTrip(int tripId) async {
     final db = await _databaseHelper.database;
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT bookings.id, bookings.trip_id, bookings.passenger_id,
         bookings.seats_reserved, bookings.status, bookings.created_at, bookings.updated_at,
         passengers.full_name AS passenger_name,
@@ -16,7 +33,9 @@ class BookingRepository {
       INNER JOIN users AS passengers ON passengers.id = bookings.passenger_id
       WHERE bookings.trip_id = ?
       ORDER BY bookings.created_at DESC, bookings.id DESC
-    ''', [tripId]);
+    ''',
+      [tripId],
+    );
     return rows.map(Booking.fromMap).toList(growable: false);
   }
 
@@ -25,7 +44,8 @@ class BookingRepository {
     required int driverId,
   }) async {
     final db = await _databaseHelper.database;
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT
         bookings.id,
         bookings.trip_id,
@@ -51,7 +71,9 @@ class BookingRepository {
       INNER JOIN users AS passengers ON passengers.id = bookings.passenger_id
       WHERE bookings.trip_id = ? AND trips.driver_id = ?
       ORDER BY bookings.created_at DESC, bookings.id DESC
-    ''', [tripId, driverId]);
+    ''',
+      [tripId, driverId],
+    );
     return rows.map(Booking.fromMap).toList(growable: false);
   }
 
@@ -64,7 +86,8 @@ class BookingRepository {
     final now = DateTime.now();
     final nowIso = now.toIso8601String();
     await db.transaction((transaction) async {
-      final rows = await transaction.rawQuery('''
+      final rows = await transaction.rawQuery(
+        '''
         SELECT
           bookings.trip_id,
           bookings.passenger_id,
@@ -82,7 +105,9 @@ class BookingRepository {
         INNER JOIN trips ON trips.id = bookings.trip_id
         WHERE bookings.id = ? AND trips.driver_id = ?
         LIMIT 1
-      ''', [bookingId, driverId]);
+      ''',
+        [bookingId, driverId],
+      );
       if (rows.isEmpty) throw StateError('Booking not found for this driver.');
       final row = rows.first;
       if (row['booking_status'] != 'pending') {
@@ -128,7 +153,8 @@ class BookingRepository {
         title: accept
             ? 'Votre réservation a été acceptée'
             : 'Votre réservation a été refusée',
-        body: 'Votre réservation pour le trajet $departure → $destination '
+        body:
+            'Votre réservation pour le trajet $departure → $destination '
             'a été ${accept ? 'acceptée' : 'refusée'}.',
         type: 'booking:$bookingId;trip:${row['trip_id']}',
         createdAt: nowIso,
@@ -139,7 +165,8 @@ class BookingRepository {
 
   Future<List<Booking>> getBookingsForPassenger(int passengerId) async {
     final db = await _databaseHelper.database;
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT
         bookings.id,
         bookings.trip_id,
@@ -173,7 +200,9 @@ class BookingRepository {
         ON vehicles.id = trips.vehicle_id AND vehicles.user_id = trips.driver_id
       WHERE bookings.passenger_id = ?
       ORDER BY bookings.created_at DESC, bookings.id DESC
-    ''', [passengerId]);
+    ''',
+      [passengerId],
+    );
 
     return rows.map(Booking.fromMap).toList(growable: false);
   }
@@ -183,7 +212,8 @@ class BookingRepository {
     required int passengerId,
   }) async {
     final db = await _databaseHelper.database;
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT
         bookings.id,
         bookings.trip_id,
@@ -217,7 +247,9 @@ class BookingRepository {
         ON vehicles.id = trips.vehicle_id AND vehicles.user_id = trips.driver_id
       WHERE bookings.id = ? AND bookings.passenger_id = ?
       LIMIT 1
-    ''', [bookingId, passengerId]);
+    ''',
+      [bookingId, passengerId],
+    );
 
     return rows.isEmpty ? null : Booking.fromMap(rows.first);
   }
@@ -230,7 +262,8 @@ class BookingRepository {
     final now = DateTime.now();
     final nowIso = now.toIso8601String();
     await db.transaction((transaction) async {
-      final rows = await transaction.rawQuery('''
+      final rows = await transaction.rawQuery(
+        '''
         SELECT
           bookings.trip_id,
           bookings.seats_reserved,
@@ -244,7 +277,9 @@ class BookingRepository {
         INNER JOIN trips ON trips.id = bookings.trip_id
         WHERE bookings.id = ? AND bookings.passenger_id = ?
         LIMIT 1
-      ''', [bookingId, passengerId]);
+      ''',
+        [bookingId, passengerId],
+      );
       if (rows.isEmpty) throw StateError('Booking not found.');
 
       final booking = rows.first;
@@ -280,10 +315,7 @@ class BookingRepository {
 
       final changedTrips = await transaction.update(
         'trips',
-        {
-          'available_seats': availableSeats + seats,
-          'updated_at': nowIso,
-        },
+        {'available_seats': availableSeats + seats, 'updated_at': nowIso},
         where: 'id = ? AND status = ?',
         whereArgs: [tripId, 'available'],
       );
@@ -303,5 +335,4 @@ class BookingRepository {
     if ([year, month, day, hour, minute].contains(null)) return true;
     return DateTime(year!, month!, day!, hour!, minute!).isBefore(now);
   }
-
 }

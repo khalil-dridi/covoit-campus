@@ -14,20 +14,18 @@ class DriverPreferences {
   });
 
   factory DriverPreferences.defaults() => const DriverPreferences(
-        smokingAllowed: false,
-        petsAllowed: false,
-        musicAllowed: true,
-        conversation: 'Modérée',
-      );
+    smokingAllowed: false,
+    petsAllowed: false,
+    musicAllowed: true,
+    conversation: 'Modérée',
+  );
 
   factory DriverPreferences.fromMap(Map<String, Object?> map) =>
       DriverPreferences(
         smokingAllowed: map['smoking_allowed'] == 1,
         petsAllowed: map['pets_allowed'] == 1,
         musicAllowed: map['music_allowed'] == 1,
-        conversation: map['conversation_allowed'] == 1
-          ? 'Modérée'
-          : 'Limitée',
+        conversation: map['conversation_allowed'] == 1 ? 'Modérée' : 'Limitée',
       );
 }
 
@@ -47,6 +45,10 @@ class DriverProfileRepository {
   final DatabaseHelper _databaseHelper = DatabaseHelper.instance;
 
   Future<DriverPreferences> getPreferences(int userId) async {
+    return await getSavedPreferences(userId) ?? DriverPreferences.defaults();
+  }
+
+  Future<DriverPreferences?> getSavedPreferences(int userId) async {
     final db = await _databaseHelper.database;
     final rows = await db.query(
       'preferences',
@@ -54,9 +56,7 @@ class DriverProfileRepository {
       whereArgs: [userId],
       limit: 1,
     );
-    return rows.isEmpty
-        ? DriverPreferences.defaults()
-        : DriverPreferences.fromMap(rows.first);
+    return rows.isEmpty ? null : DriverPreferences.fromMap(rows.first);
   }
 
   Future<void> savePreferences(

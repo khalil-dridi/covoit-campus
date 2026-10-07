@@ -4,20 +4,19 @@ import 'package:flutter/material.dart';
 
 import '../../../models/user.dart';
 import '../../../repositories/user_repository.dart';
+import '../../../repositories/booking_repository.dart';
+import '../../../repositories/rating_repository.dart';
 import '../../login/login_screen.dart';
 import '../../../utils/logout_flow.dart';
 
 class PassengerProfileScreen extends StatefulWidget {
   final User user;
+  final VoidCallback? onBack;
 
-  const PassengerProfileScreen({
-    super.key,
-    required this.user,
-  });
+  const PassengerProfileScreen({super.key, required this.user, this.onBack});
 
   @override
-  State<PassengerProfileScreen> createState() =>
-      _PassengerProfileScreenState();
+  State<PassengerProfileScreen> createState() => _PassengerProfileScreenState();
 }
 
 class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
@@ -34,20 +33,20 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
   static const Color lightBlue = Color(0xFFEAF3FC);
   static const Color lightGreen = Color(0xFFE8F8F1);
   static const Color lightOrange = Color(0xFFFFF1E6);
-  static const Color lightRed = Color(0xFFFFECEC);
 
   // ==========================================================
   // STATES
   // ==========================================================
 
-  bool smokingPreference = false;
-  bool musicPreference = true;
-  bool petsPreference = false;
-
   late bool driverMode;
   late String _fullName;
   late String _phone;
   late String _university;
+  bool _statisticsLoading = true;
+  bool _statisticsAvailable = false;
+  double? _averageRating;
+  int _ratingCount = 0;
+  int _completedTripCount = 0;
 
   // ==========================================================
   // INIT
@@ -61,6 +60,33 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
     _fullName = widget.user.fullName;
     _phone = widget.user.phone ?? '';
     _university = widget.user.university ?? '';
+    unawaited(_loadStatistics());
+  }
+
+  Future<void> _loadStatistics() async {
+    final userId = widget.user.id;
+    if (userId == null) {
+      if (mounted) setState(() => _statisticsLoading = false);
+      return;
+    }
+    try {
+      final results = await Future.wait([
+        RatingRepository().getPublicStats(userId),
+        BookingRepository().getCompletedPassengerTripCount(userId),
+      ]);
+      if (!mounted) return;
+      final rating = results[0] as ({double? average, int count});
+      setState(() {
+        _averageRating = rating.average;
+        _ratingCount = rating.count;
+        _completedTripCount = results[1] as int;
+        _statisticsAvailable = true;
+        _statisticsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _statisticsLoading = false);
+    }
   }
 
   // ==========================================================
@@ -74,34 +100,32 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            30,
-          ),
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(context),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 16),
 
               _buildProfileHeader(context),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 22),
+
+              _buildSectionHeading(
+                'Mon activité',
+                'Votre expérience sur Covoit Campus',
+              ),
+
+              const SizedBox(height: 12),
 
               _buildStatistics(),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
               _buildPersonalInformation(context),
 
               const SizedBox(height: 24),
-
-              _buildTravelPreferences(context),
-
-              const SizedBox(height: 20),
 
               _buildDriverModeCard(context),
 
@@ -129,7 +153,12 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
         _buildHeaderButton(
           icon: Icons.arrow_back_rounded,
           onTap: () {
-            Navigator.of(context).maybePop();
+            final navigator = Navigator.of(context);
+            if (navigator.canPop()) {
+              navigator.pop();
+            } else {
+              widget.onBack?.call();
+            }
           },
         ),
 
@@ -169,68 +198,54 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
 
   Widget _buildProfileHeader(BuildContext context) {
     final bool isVerified = widget.user.isVerified;
+    final imagePath = widget.user.profileImage?.trim();
+    final verifiedColor = isVerified ? green : const Color(0xFFFFD2C8);
+    final avatar = _buildAvatar(imagePath);
 
-    return Center(
-      child: Column(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: primaryBlue,
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: primaryBlue.withValues(alpha: 0.14),
+            blurRadius: 20,
+            offset: const Offset(0, 9),
+          ),
+        ],
+      ),
+      child: Row(
         children: [
-          // Avatar
           Stack(
             clipBehavior: Clip.none,
             children: [
               Container(
-                width: 118,
-                height: 118,
+                width: 78,
+                height: 78,
                 decoration: BoxDecoration(
-                  color: lightBlue,
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white,
-                    width: 5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryBlue.withValues(
-                        alpha: 0.10,
-                      ),
-                      blurRadius: 24,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
+                  border: Border.all(color: Colors.white, width: 3),
                 ),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: secondaryBlue,
-                  size: 62,
-                ),
+                child: ClipOval(child: avatar),
               ),
-
-              // Camera
               Positioned(
                 right: -2,
-                bottom: 2,
+                bottom: -1,
                 child: Material(
                   color: secondaryBlue,
                   shape: const CircleBorder(),
                   child: InkWell(
                     customBorder: const CircleBorder(),
-                    onTap: () {
-                      _showPhotoDialog(context);
-                    },
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: secondaryBlue,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: background,
-                          width: 4,
-                        ),
-                      ),
-                      child: const Icon(
+                    onTap: () => _showPhotoDialog(context),
+                    child: const SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: Icon(
                         Icons.camera_alt_outlined,
                         color: Colors.white,
-                        size: 19,
+                        size: 15,
                       ),
                     ),
                   ),
@@ -238,55 +253,52 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
               ),
             ],
           ),
-
-          const SizedBox(height: 16),
-
-          Text(
-            _fullName,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: primaryBlue,
-              fontSize: 27,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.6,
-            ),
-          ),
-
-          const SizedBox(height: 9),
-
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 8,
-            ),
-            decoration: BoxDecoration(
-              color: isVerified
-                  ? green.withValues(alpha: 0.10)
-                  : Colors.red.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  isVerified
-                      ? Icons.check_circle_rounded
-                      : Icons.error_outline_rounded,
-                  color: isVerified ? green : Colors.red,
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
                 Text(
-                  isVerified
-                      ? 'Email vérifié'
-                      : 'Email non vérifié',
-                  style: TextStyle(
-                    color: isVerified ? green : Colors.red,
-                    fontSize: 13,
+                  _fullName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    height: 1.15,
                     fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
                   ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  _university.trim().isEmpty ? 'Espace passager' : _university,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.76),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 11),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _heroPill(
+                      icon: Icons.person_outline_rounded,
+                      label: 'Passager',
+                      color: Colors.white,
+                    ),
+                    _heroPill(
+                      icon: isVerified
+                          ? Icons.verified_rounded
+                          : Icons.error_outline_rounded,
+                      label: isVerified ? 'Email vérifié' : 'À vérifier',
+                      color: verifiedColor,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -296,47 +308,135 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
     );
   }
 
+  Widget _buildAvatar(String? imagePath) {
+    final uri = imagePath == null ? null : Uri.tryParse(imagePath);
+    final isNetwork =
+        uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+    if (imagePath != null && imagePath.isNotEmpty && isNetwork) {
+      return Image.network(
+        imagePath,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _avatarFallback(),
+      );
+    }
+    if (imagePath?.startsWith('assets/') == true) {
+      return Image.asset(
+        imagePath!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _avatarFallback(),
+      );
+    }
+    return _avatarFallback();
+  }
+
+  Widget _avatarFallback() {
+    final initials = _fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part[0].toUpperCase())
+        .join();
+    return Container(
+      color: lightBlue,
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? 'CC' : initials,
+        style: const TextStyle(
+          color: primaryBlue,
+          fontSize: 25,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _heroPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 13),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+
   // ==========================================================
   // STATISTICS
   // ==========================================================
 
   Widget _buildStatistics() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.star_rounded,
-            iconColor: const Color(0xFFF2B84B),
-            value: '4.8',
-            label: 'Note',
-            subtitle: '(32 avis)',
-          ),
-        ),
-
-        const SizedBox(width: 10),
-
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.route_rounded,
-            iconColor: secondaryBlue,
-            value: '12',
-            label: 'Trajets',
-            subtitle: 'en tant que passager',
-          ),
-        ),
-
-        const SizedBox(width: 10),
-
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.eco_rounded,
-            iconColor: green,
-            value: '8.4',
-            label: 'kg CO₂ évités',
-            subtitle: 'Bravo !',
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gap = constraints.maxWidth < 340 ? 7.0 : 10.0;
+        final cardWidth = (constraints.maxWidth - gap * 2) / 3;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            SizedBox(
+              width: cardWidth,
+              child: _buildStatCard(
+                icon: Icons.star_rounded,
+                iconColor: const Color(0xFFF2B84B),
+                value: _statisticsLoading
+                    ? '…'
+                    : _averageRating?.toStringAsFixed(1) ?? '—',
+                label: 'Note / 5',
+                subtitle: _statisticsLoading
+                    ? 'Chargement'
+                    : !_statisticsAvailable
+                    ? 'Indisponible'
+                    : _ratingCount == 0
+                    ? 'Aucun avis'
+                    : '$_ratingCount avis',
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _buildStatCard(
+                icon: Icons.route_rounded,
+                iconColor: secondaryBlue,
+                value: _statisticsLoading
+                    ? '…'
+                    : _statisticsAvailable
+                    ? '$_completedTripCount'
+                    : '—',
+                label: 'Trajets',
+                subtitle: 'terminés',
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _buildStatCard(
+                icon: Icons.eco_rounded,
+                iconColor: green,
+                value: '—',
+                label: 'CO₂ évités',
+                subtitle: 'Calcul en préparation',
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -348,21 +448,12 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
     required String subtitle,
   }) {
     return Container(
-      constraints: const BoxConstraints(
-        minHeight: 158,
-      ),
-      padding: const EdgeInsets.fromLTRB(
-        10,
-        18,
-        10,
-        14,
-      ),
+      constraints: const BoxConstraints.tightFor(height: 150),
+      padding: const EdgeInsets.fromLTRB(7, 13, 7, 11),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(21),
-        border: Border.all(
-          color: const Color(0xFFE1ECE8),
-        ),
+        border: Border.all(color: const Color(0xFFE1ECE8)),
         boxShadow: [
           BoxShadow(
             color: primaryBlue.withValues(alpha: 0.045),
@@ -374,11 +465,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            color: iconColor,
-            size: 30,
-          ),
+          Icon(icon, color: iconColor, size: 25),
 
           const SizedBox(height: 8),
 
@@ -386,7 +473,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
             value,
             style: const TextStyle(
               color: primaryBlue,
-              fontSize: 24,
+              fontSize: 21,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -400,7 +487,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: textGrey.withValues(alpha: 0.85),
-              fontSize: 11.5,
+              fontSize: 10.5,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -414,7 +501,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: textGrey.withValues(alpha: 0.60),
-              fontSize: 9.5,
+              fontSize: 9,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -466,9 +553,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
         _buildInformationRow(
           icon: Icons.phone_outlined,
           label: 'Téléphone',
-          value: _phone.trim().isNotEmpty
-              ? _phone
-              : 'Non renseigné',
+          value: _phone.trim().isNotEmpty ? _phone : 'Non renseigné',
           onTap: () {
             _showEditPersonalInfoDialog(context);
           },
@@ -479,9 +564,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
         _buildInformationRow(
           icon: Icons.school_outlined,
           label: 'Université',
-          value: _university.trim().isNotEmpty
-              ? _university
-              : 'Non renseignée',
+          value: _university.trim().isNotEmpty ? _university : 'Non renseignée',
           onTap: () {
             _showEditPersonalInfoDialog(context);
           },
@@ -490,49 +573,47 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
     );
   }
 
-  // ==========================================================
-  // TRAVEL PREFERENCES
-  // ==========================================================
-
-  Widget _buildTravelPreferences(BuildContext context) {
-    return _buildLargeSectionCard(
-      title: 'Préférences de trajet',
-      icon: Icons.tune_rounded,
-      onEdit: () {
-        _showInfoDialog(
-          context,
-          title: 'Préférences',
-          message:
-              'Vous pourrez bientôt modifier vos villes, '
-              'horaires et préférences de trajet.',
-          icon: Icons.tune_rounded,
-        );
-      },
+  Widget _buildSectionHeading(String title, String subtitle) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 2),
+    child: Row(
       children: [
-        _buildInformationRow(
-          icon: Icons.route_rounded,
-          label: 'Villes préférées',
-          value: 'Tunis, Ariana, Manouba',
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: primaryBlue,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: textGrey.withValues(alpha: 0.8),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
-
-        _buildDivider(),
-
-        _buildInformationRow(
-          icon: Icons.access_time_rounded,
-          label: 'Horaires préférés',
-          value: 'Matin (7h–9h)',
-        ),
-
-        _buildDivider(),
-
-        _buildInformationRow(
-          icon: Icons.groups_rounded,
-          label: 'Type de trajet',
-          value: 'Uniquement étudiants',
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: lightGreen,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: const Icon(Icons.insights_rounded, color: green, size: 18),
         ),
       ],
-    );
-  }
+    ),
+  );
 
   // ==========================================================
   // LARGE SECTION CARD
@@ -549,9 +630,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFFE1ECE8),
-        ),
+        border: Border.all(color: const Color(0xFFE1ECE8)),
         boxShadow: [
           BoxShadow(
             color: primaryBlue.withValues(alpha: 0.04),
@@ -563,12 +642,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              16,
-              12,
-              14,
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
             child: Row(
               children: [
                 Container(
@@ -578,11 +652,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                     color: lightBlue,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    icon,
-                    color: secondaryBlue,
-                    size: 21,
-                  ),
+                  child: Icon(icon, color: secondaryBlue, size: 21),
                 ),
 
                 const SizedBox(width: 11),
@@ -602,8 +672,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                   onPressed: onEdit,
                   style: TextButton.styleFrom(
                     foregroundColor: secondaryBlue,
-                    backgroundColor:
-                        lightBlue.withValues(alpha: 0.65),
+                    backgroundColor: lightBlue.withValues(alpha: 0.65),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 7,
@@ -612,10 +681,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  icon: const Icon(
-                    Icons.edit_outlined,
-                    size: 16,
-                  ),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
                   label: const Text(
                     'Modifier',
                     style: TextStyle(
@@ -628,14 +694,9 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
             ),
           ),
 
-          const Divider(
-            height: 1,
-            color: Color(0xFFE5ECE9),
-          ),
+          const Divider(height: 1, color: Color(0xFFE5ECE9)),
 
-          Column(
-            children: children,
-          ),
+          Column(children: children),
         ],
       ),
     );
@@ -653,75 +714,51 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
     VoidCallback? onTap,
   }) {
     final content = Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 15,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
-            decoration: const BoxDecoration(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
               color: lightBlue,
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: secondaryBlue,
-              size: 19,
-            ),
+            child: Icon(icon, color: secondaryBlue, size: 18),
           ),
-
           const SizedBox(width: 12),
-
           Expanded(
-            flex: 5,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: textGrey.withValues(alpha: 0.88),
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-
-          Expanded(
-            flex: 7,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Flexible(
-                  child: Text(
-                    value,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: primaryBlue,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: textGrey.withValues(alpha: 0.84),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-
-                if (trailing != null) ...[
-                  const SizedBox(width: 7),
-                  trailing,
-                ],
-
-                if (onTap != null) ...[
-                  const SizedBox(width: 6),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: textGrey,
-                    size: 20,
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: primaryBlue,
+                    fontSize: 13,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
                   ),
-                ],
+                ),
               ],
             ),
           ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing],
+          if (onTap != null) ...[
+            const SizedBox(width: 5),
+            const Icon(Icons.chevron_right_rounded, color: textGrey, size: 20),
+          ],
         ],
       ),
     );
@@ -732,10 +769,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
 
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: content,
-      ),
+      child: InkWell(onTap: onTap, child: content),
     );
   }
 
@@ -745,13 +779,8 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
 
   Widget _buildDivider() {
     return const Padding(
-      padding: EdgeInsets.only(
-        left: 66,
-      ),
-      child: Divider(
-        height: 1,
-        color: Color(0xFFE5ECE9),
-      ),
+      padding: EdgeInsets.only(left: 66),
+      child: Divider(height: 1, color: Color(0xFFE5ECE9)),
     );
   }
 
@@ -765,9 +794,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: driverMode
-            ? lightGreen
-            : lightBlue.withValues(alpha: 0.75),
+        color: driverMode ? lightGreen : lightBlue.withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(21),
         border: Border.all(
           color: driverMode
@@ -816,7 +843,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                   driverMode
                       ? 'Publiez et gérez vos propres trajets.'
                       : 'Proposez vos trajets et aidez '
-                          'd’autres étudiants.',
+                            'd’autres étudiants.',
                   style: const TextStyle(
                     color: textGrey,
                     fontSize: 10.5,
@@ -853,9 +880,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0xFFE1ECE8),
-        ),
+        border: Border.all(color: const Color(0xFFE1ECE8)),
       ),
       child: Column(
         children: [
@@ -867,22 +892,6 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
             backgroundColor: lightOrange,
             onTap: () {
               _showLogoutDialog(context);
-            },
-          ),
-
-          const Divider(
-            height: 1,
-            color: Color(0xFFE7ECEA),
-          ),
-
-          _buildAccountAction(
-            icon: Icons.delete_outline_rounded,
-            title: 'Supprimer mon compte',
-            subtitle: 'Cette action est définitive.',
-            color: const Color(0xFFE53935),
-            backgroundColor: lightRed,
-            onTap: () {
-              _showDeleteAccountDialog(context);
             },
           ),
         ],
@@ -915,19 +924,14 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                   color: backgroundColor,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 23,
-                ),
+                child: Icon(icon, color: color, size: 23),
               ),
 
               const SizedBox(width: 12),
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
@@ -943,9 +947,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                     Text(
                       subtitle,
                       style: TextStyle(
-                        color: textGrey.withValues(
-                          alpha: 0.75,
-                        ),
+                        color: textGrey.withValues(alpha: 0.75),
                         fontSize: 10.5,
                       ),
                     ),
@@ -953,10 +955,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                 ),
               ),
 
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: textGrey,
-              ),
+              const Icon(Icons.chevron_right_rounded, color: textGrey),
             ],
           ),
         ),
@@ -1011,11 +1010,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
         child: SizedBox(
           width: 46,
           height: 46,
-          child: Icon(
-            icon,
-            color: primaryBlue,
-            size: 22,
-          ),
+          child: Icon(icon, color: primaryBlue, size: 22),
         ),
       ),
     );
@@ -1061,9 +1056,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
   // DISABLE DRIVER MODE
   // ==========================================================
 
-  void _showDisableDriverModeDialog(
-    BuildContext context,
-  ) {
+  void _showDisableDriverModeDialog(BuildContext context) {
     _showConfirmationDialog(
       context,
       icon: Icons.person_rounded,
@@ -1115,9 +1108,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
   void _showRoleUpdateError(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-          'Impossible de modifier votre rôle. Veuillez réessayer.',
-        ),
+        content: Text('Impossible de modifier votre rôle. Veuillez réessayer.'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -1235,42 +1226,10 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
   }
 
   // ==========================================================
-  // DELETE ACCOUNT DIALOG
-  // ==========================================================
-
-  void _showDeleteAccountDialog(
-    BuildContext context,
-  ) {
-    _showConfirmationDialog(
-      context,
-      icon: Icons.delete_outline_rounded,
-      iconColor: const Color(0xFFE53935),
-      title: 'Supprimer votre compte ?',
-      message:
-          'Cette action est définitive. Les informations '
-          'associées à votre compte pourront être supprimées.',
-      cancelText: 'Annuler',
-      confirmText: 'Supprimer',
-      onConfirm: () {
-        _showInfoDialog(
-          context,
-          title: 'Suppression du compte',
-          message:
-              'La suppression réelle du compte sera connectée '
-              'à SQLite dans une prochaine étape.',
-          icon: Icons.info_outline_rounded,
-        );
-      },
-    );
-  }
-
-  // ==========================================================
   // EDIT PERSONAL INFO
   // ==========================================================
 
-  void _showEditPersonalInfoDialog(
-    BuildContext context,
-  ) {
+  void _showEditPersonalInfoDialog(BuildContext context) {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -1314,16 +1273,9 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       builder: (dialogContext) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 24,
-          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(
-              24,
-              24,
-              24,
-              20,
-            ),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(28),
@@ -1345,11 +1297,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                     color: iconColor.withValues(alpha: 0.10),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    icon,
-                    color: iconColor,
-                    size: 31,
-                  ),
+                  child: Icon(icon, color: iconColor, size: 31),
                 ),
 
                 const SizedBox(height: 18),
@@ -1391,11 +1339,9 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                             color: Color(0xFFD8E6E1),
                             width: 1.3,
                           ),
-                          minimumSize:
-                              const Size.fromHeight(48),
+                          minimumSize: const Size.fromHeight(48),
                           shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(15),
+                            borderRadius: BorderRadius.circular(15),
                           ),
                         ),
                         child: Text(
@@ -1421,11 +1367,9 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                           backgroundColor: iconColor,
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          minimumSize:
-                              const Size.fromHeight(48),
+                          minimumSize: const Size.fromHeight(48),
                           shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(15),
+                            borderRadius: BorderRadius.circular(15),
                           ),
                         ),
                         child: Text(
@@ -1463,9 +1407,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       builder: (dialogContext) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 24,
-          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -1482,11 +1424,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                     color: lightBlue,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    icon,
-                    color: secondaryBlue,
-                    size: 29,
-                  ),
+                  child: Icon(icon, color: secondaryBlue, size: 29),
                 ),
 
                 const SizedBox(height: 18),
@@ -1527,8 +1465,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(15),
+                        borderRadius: BorderRadius.circular(15),
                       ),
                     ),
                     child: const Text(
@@ -1554,8 +1491,7 @@ class _EditPersonalInfoDialog extends StatefulWidget {
   final String fullName;
   final String phone;
   final String university;
-  final void Function(String fullName, String phone, String university)
-      onSaved;
+  final void Function(String fullName, String phone, String university) onSaved;
 
   const _EditPersonalInfoDialog({
     required this.userId,
@@ -1843,8 +1779,9 @@ class _EditPersonalInfoDialogState extends State<_EditPersonalInfoDialog> {
           size: 20,
         ),
         filled: true,
-        fillColor:
-            _PassengerProfileScreenState.lightBlue.withValues(alpha: 0.45),
+        fillColor: _PassengerProfileScreenState.lightBlue.withValues(
+          alpha: 0.45,
+        ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 14,

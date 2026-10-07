@@ -11,10 +11,7 @@ import 'trips/passenger_bookings_screen.dart';
 class PassengerShell extends StatefulWidget {
   final User user;
 
-  const PassengerShell({
-    super.key,
-    required this.user,
-  });
+  const PassengerShell({super.key, required this.user});
 
   @override
   State<PassengerShell> createState() => _PassengerShellState();
@@ -38,14 +35,14 @@ class _PassengerShellState extends State<PassengerShell> {
 
       ConversationsScreen(currentUser: widget.user),
 
-      PassengerProfileScreen(user: widget.user),
+      PassengerProfileScreen(
+        user: widget.user,
+        onBack: () => setState(() => _currentIndex = 0),
+      ),
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: pages),
 
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
@@ -70,12 +67,8 @@ class _PassengerShellState extends State<PassengerShell> {
           ),
 
           const NavigationDestination(
-            icon: Icon(
-              Icons.confirmation_number_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.confirmation_number_rounded,
-            ),
+            icon: Icon(Icons.confirmation_number_outlined),
+            selectedIcon: Icon(Icons.confirmation_number_rounded),
             label: 'Réservations',
           ),
 
