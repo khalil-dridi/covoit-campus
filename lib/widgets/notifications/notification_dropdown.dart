@@ -13,6 +13,9 @@ import '../../screens/shared/messages/chat_screen.dart';
 class NotificationDropdown extends StatefulWidget {
   final User user;
   final LayerLink layerLink;
+  final double horizontalOffset;
+  final double panelWidth;
+  final double maxHeight;
   final VoidCallback onClose;
   final VoidCallback onViewAll;
 
@@ -20,6 +23,9 @@ class NotificationDropdown extends StatefulWidget {
     super.key,
     required this.user,
     required this.layerLink,
+    this.horizontalOffset = 0,
+    this.panelWidth = 340,
+    this.maxHeight = 500,
     required this.onClose,
     required this.onViewAll,
   });
@@ -83,27 +89,17 @@ class _NotificationDropdownState extends State<NotificationDropdown> {
 
   @override
   Widget build(BuildContext context) {
-    final screen = MediaQuery.sizeOf(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final availableWidth = constraints.maxWidth.isFinite
-            ? constraints.maxWidth
-            : screen.width;
-        final width = (availableWidth - 24).clamp(12.0, 340.0);
-
-        return CompositedTransformFollower(
-          link: widget.layerLink,
-          showWhenUnlinked: false,
-          targetAnchor: Alignment.bottomRight,
-          followerAnchor: Alignment.topRight,
-          offset: const Offset(0, 8),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: width,
-              maxHeight: screen.height * 0.7,
-            ),
-            child: Material(
+    return CompositedTransformFollower(
+      link: widget.layerLink,
+      showWhenUnlinked: false,
+      targetAnchor: Alignment.bottomRight,
+      followerAnchor: Alignment.topRight,
+      offset: Offset(widget.horizontalOffset, 8),
+      child: SizedBox(
+        width: widget.panelWidth,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: widget.maxHeight),
+          child: Material(
               color: Colors.white,
               elevation: 12,
               shadowColor: primaryBlue.withValues(alpha: 0.16),
@@ -122,10 +118,9 @@ class _NotificationDropdownState extends State<NotificationDropdown> {
                   ],
                 ),
               ),
-            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 

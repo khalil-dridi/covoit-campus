@@ -25,6 +25,7 @@ class _NotificationBellState extends State<NotificationBell>
     with WidgetsBindingObserver {
   final NotificationRepository _repository = NotificationRepository();
   final LayerLink _layerLink = LayerLink();
+  final GlobalKey _targetKey = GlobalKey();
   OverlayEntry? _dropdownEntry;
   int _unreadCount = 0;
 
@@ -40,7 +41,8 @@ class _NotificationBellState extends State<NotificationBell>
   void dispose() {
     NotificationRepository.changes.removeListener(_loadCount);
     WidgetsBinding.instance.removeObserver(this);
-    _closeDropdown();
+    _dropdownEntry?.remove();
+    _dropdownEntry = null;
     super.dispose();
   }
 
@@ -73,19 +75,56 @@ class _NotificationBellState extends State<NotificationBell>
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null || !mounted) return;
     _closeDropdown();
+
+    final media = MediaQuery.of(context);
+    final panelWidth = (media.size.width - media.padding.left -
+            media.padding.right -
+            24)
+        .clamp(1.0, 340.0)
+        .toDouble();
+    final targetObject = _targetKey.currentContext?.findRenderObject();
+    final targetRect = targetObject is RenderBox && targetObject.hasSize
+        ? targetObject.localToGlobal(Offset.zero) & targetObject.size
+        : null;
+    final minLeft = media.padding.left + 12;
+    final maxLeft = media.size.width - media.padding.right - 12 - panelWidth;
+    final preferredLeft = targetRect == null
+        ? minLeft
+        : targetRect.right - panelWidth;
+    final panelLeft = preferredLeft.clamp(minLeft, maxLeft).toDouble();
+    final horizontalOffset = panelLeft - preferredLeft;
+    final availableHeight = targetRect == null
+        ? media.size.height * 0.7
+        : media.size.height -
+              media.padding.bottom -
+              12 -
+              targetRect.bottom -
+              8;
+    final maxHeight = availableHeight
+        .clamp(120.0, media.size.height * 0.7)
+        .toDouble();
+
     _dropdownEntry = OverlayEntry(
-      builder: (context) => Positioned.fill(
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: _closeDropdown,
-          child: NotificationDropdown(
+      builder: (_) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _closeDropdown,
+            ),
+          ),
+          NotificationDropdown(
             key: const Key('notification-dropdown'),
             user: widget.user,
             layerLink: _layerLink,
+            horizontalOffset: horizontalOffset,
+            panelWidth: panelWidth,
+            maxHeight: maxHeight,
             onClose: _closeDropdown,
             onViewAll: _openNotifications,
           ),
-        ),
+        ],
       ),
     );
     overlay.insert(_dropdownEntry!);
@@ -93,8 +132,10 @@ class _NotificationBellState extends State<NotificationBell>
   }
 
   void _closeDropdown() {
-    _dropdownEntry?.remove();
+    final entry = _dropdownEntry;
+    if (entry == null) return;
     _dropdownEntry = null;
+    entry.remove();
     if (mounted) setState(() {});
   }
 
@@ -121,6 +162,7 @@ class _NotificationBellState extends State<NotificationBell>
           clipBehavior: Clip.none,
           children: [
             CompositedTransformTarget(
+              key: _targetKey,
               link: _layerLink,
               child: IconButton(
                 tooltip: 'Notifications',
