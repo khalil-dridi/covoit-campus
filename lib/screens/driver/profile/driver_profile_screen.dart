@@ -6,6 +6,7 @@ import '../../../repositories/driver_profile_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../repositories/vehicle_repository.dart';
 import '../../login/login_screen.dart';
+import '../../../utils/logout_flow.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   final User user;
@@ -980,19 +981,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Future<void> _confirmLogout() async {
-    final confirmed = await _showConfirmationDialog(
-      title: 'Se déconnecter ?',
-      message: 'Votre session actuelle sera fermée.',
-      icon: Icons.logout_rounded,
-      iconColor: const Color(0xFFE96A2C),
-      cancelText: 'Rester connecté',
-      confirmText: 'Se déconnecter',
-    );
-    if (!mounted || confirmed != true) return;
-    Navigator.of(context).pushAndRemoveUntil<void>(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
+    await LogoutFlow.confirmAndLogout(context);
   }
 
   Future<void> _confirmDeleteAccount() async {

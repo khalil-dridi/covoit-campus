@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
+import '../../screens/passenger/profile/passenger_profile_screen.dart';
+import '../../utils/logout_flow.dart';
 import '../shared/notification_bell.dart';
 
 class PassengerHeader extends StatelessWidget {
@@ -49,7 +53,7 @@ class PassengerHeader extends StatelessWidget {
                       const SizedBox(width: 12),
                       _buildNotificationButton(),
                       const SizedBox(width: 10),
-                      _buildAvatar(),
+                      _buildAvatar(context),
                     ],
                   ),
                   const Spacer(),
@@ -154,7 +158,7 @@ class PassengerHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar() {
+  Widget _buildAvatar(BuildContext context) {
     final imagePath = user.profileImage?.trim();
     final imageUri = imagePath == null ? null : Uri.tryParse(imagePath);
     final isNetworkImage = imageUri != null &&
@@ -180,22 +184,60 @@ class PassengerHeader extends StatelessWidget {
       image = _buildAvatarFallback();
     }
 
-    return Container(
-      width: 48,
-      height: 48,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: primaryBlue.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    return PopupMenuButton<_PassengerHeaderAction>(
+      tooltip: 'Profil et compte',
+      onSelected: (action) {
+        if (action == _PassengerHeaderAction.logout) {
+          unawaited(LogoutFlow.confirmAndLogout(context));
+        } else {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => PassengerProfileScreen(user: user),
+            ),
+          );
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: _PassengerHeaderAction.profile,
+          child: _PassengerHeaderMenuItem(
+            icon: Icons.person_outline_rounded,
+            label: 'Mon profil',
           ),
-        ],
+        ),
+        PopupMenuItem(
+          value: _PassengerHeaderAction.mode,
+          child: _PassengerHeaderMenuItem(
+            icon: Icons.swap_horiz_rounded,
+            label: 'Changer de mode',
+          ),
+        ),
+        PopupMenuItem(
+          value: _PassengerHeaderAction.logout,
+          child: _PassengerHeaderMenuItem(
+            icon: Icons.logout_rounded,
+            label: 'Se déconnecter',
+            destructive: true,
+          ),
+        ),
+      ],
+      child: Container(
+        width: 48,
+        height: 48,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: primaryBlue.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: ClipOval(child: image),
       ),
-      child: ClipOval(child: image),
     );
   }
 
@@ -210,4 +252,37 @@ class PassengerHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _PassengerHeaderAction { profile, mode, logout }
+
+class _PassengerHeaderMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool destructive;
+
+  const _PassengerHeaderMenuItem({
+    required this.icon,
+    required this.label,
+    this.destructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: destructive ? const Color(0xFFD87532) : PassengerHeader.primaryBlue,
+          ),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              color: destructive ? const Color(0xFFD87532) : const Color(0xFF243B4B),
+              fontWeight: destructive ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ],
+      );
 }

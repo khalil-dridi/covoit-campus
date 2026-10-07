@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/user.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../utils/password_hasher.dart';
-import '../../login/login_screen.dart';
+import '../../../utils/logout_flow.dart';
 
 class AdminProfileScreen extends StatefulWidget {
   final User admin;
@@ -896,37 +896,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   );
 
   Future<void> _confirmLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.logout_rounded, color: Color(0xFFD87532)),
-        title: const Text(
-          'Se déconnecter ?',
-          style: TextStyle(color: _navy, fontWeight: FontWeight.w800),
-        ),
-        content: const Text(
-          'Votre session sera fermée et vous reviendrez à l’écran de connexion.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Rester connecté'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFD87532),
-            ),
-            child: const Text('Se déconnecter'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || confirmed != true) return;
-    Navigator.of(context).pushAndRemoveUntil<void>(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
+    await LogoutFlow.confirmAndLogout(context);
   }
 
   void _message(String value) =>

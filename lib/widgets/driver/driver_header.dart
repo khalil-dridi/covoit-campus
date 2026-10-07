@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
+import '../../screens/driver/profile/driver_profile_screen.dart';
+import '../../utils/logout_flow.dart';
 import '../shared/notification_bell.dart';
 
 class DriverHeader extends StatelessWidget {
@@ -47,7 +51,7 @@ class DriverHeader extends StatelessWidget {
                       const SizedBox(width: 9),
                       _notificationButton(),
                       const SizedBox(width: 9),
-                      _avatar(),
+                      _avatar(context),
                     ],
                   ),
                   const Spacer(),
@@ -172,7 +176,7 @@ class DriverHeader extends StatelessWidget {
               ),
       );
 
-  Widget _avatar() {
+  Widget _avatar(BuildContext context) {
     final path = user.profileImage?.trim();
     final uri = path == null ? null : Uri.tryParse(path);
     final isNetwork = uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
@@ -196,22 +200,67 @@ class DriverHeader extends StatelessWidget {
       image = _avatarFallback();
     }
 
-    return Container(
-      width: 46,
-      height: 46,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: primaryBlue.withValues(alpha: 0.09),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    return PopupMenuButton<_DriverHeaderAction>(
+      tooltip: 'Profil et compte',
+      onSelected: (action) {
+        if (action == _DriverHeaderAction.logout) {
+          unawaited(LogoutFlow.confirmAndLogout(context));
+        } else {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => DriverProfileScreen(user: user),
+            ),
+          );
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: _DriverHeaderAction.profile,
+          child: _DriverHeaderMenuItem(
+            icon: Icons.person_outline_rounded,
+            label: 'Mon profil',
           ),
-        ],
+        ),
+        PopupMenuItem(
+          value: _DriverHeaderAction.vehicle,
+          child: _DriverHeaderMenuItem(
+            icon: Icons.directions_car_outlined,
+            label: 'Mon véhicule',
+          ),
+        ),
+        PopupMenuItem(
+          value: _DriverHeaderAction.mode,
+          child: _DriverHeaderMenuItem(
+            icon: Icons.swap_horiz_rounded,
+            label: 'Changer de mode',
+          ),
+        ),
+        PopupMenuItem(
+          value: _DriverHeaderAction.logout,
+          child: _DriverHeaderMenuItem(
+            icon: Icons.logout_rounded,
+            label: 'Se déconnecter',
+            destructive: true,
+          ),
+        ),
+      ],
+      child: Container(
+        width: 46,
+        height: 46,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: primaryBlue.withValues(alpha: 0.09),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: ClipOval(child: image),
       ),
-      child: ClipOval(child: image),
     );
   }
 
@@ -219,5 +268,38 @@ class DriverHeader extends StatelessWidget {
         color: const Color(0xFFEAF3FC),
         alignment: Alignment.center,
         child: const Icon(Icons.person_rounded, color: primaryBlue, size: 26),
+      );
+}
+
+enum _DriverHeaderAction { profile, vehicle, mode, logout }
+
+class _DriverHeaderMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool destructive;
+
+  const _DriverHeaderMenuItem({
+    required this.icon,
+    required this.label,
+    this.destructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: destructive ? const Color(0xFFD87532) : DriverHeader.primaryBlue,
+          ),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              color: destructive ? const Color(0xFFD87532) : const Color(0xFF243B4B),
+              fontWeight: destructive ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ],
       );
 }

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../models/user.dart';
 import '../../../repositories/user_repository.dart';
 import '../../login/login_screen.dart';
+import '../../../utils/logout_flow.dart';
 
 class PassengerProfileScreen extends StatefulWidget {
   final User user;
@@ -1228,27 +1231,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
   // ==========================================================
 
   void _showLogoutDialog(BuildContext context) {
-    _showConfirmationDialog(
-      context,
-      icon: Icons.logout_rounded,
-      iconColor: const Color(0xFFE96A2C),
-      title: 'Se déconnecter ?',
-      message:
-          'Votre session actuelle sera fermée. '
-          'Vous pourrez vous reconnecter à tout moment.',
-      cancelText: 'Rester connecté',
-      confirmText: 'Se déconnecter',
-      onConfirm: () {
-        _showInfoDialog(
-          context,
-          title: 'Déconnexion',
-          message:
-              'La déconnexion sera connectée à la gestion '
-              'de session dans la prochaine étape.',
-          icon: Icons.check_circle_outline_rounded,
-        );
-      },
-    );
+    unawaited(LogoutFlow.confirmAndLogout(context));
   }
 
   // ==========================================================
