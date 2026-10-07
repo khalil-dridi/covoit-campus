@@ -18,10 +18,7 @@ import 'chat_screen.dart';
 class ConversationsScreen extends StatefulWidget {
   final User currentUser;
 
-  const ConversationsScreen({
-    super.key,
-    required this.currentUser,
-  });
+  const ConversationsScreen({super.key, required this.currentUser});
 
   @override
   State<ConversationsScreen> createState() => _ConversationsScreenState();
@@ -58,7 +55,14 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   @override
   void initState() {
     super.initState();
+    MessageRepository.changes.addListener(_loadConversations);
     _loadConversations();
+  }
+
+  @override
+  void dispose() {
+    MessageRepository.changes.removeListener(_loadConversations);
+    super.dispose();
   }
 
   // ---------------------------------------------------------------------------
@@ -82,8 +86,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     });
 
     try {
-      final conversations =
-          await _repository.getConversationsForUser(userId);
+      final conversations = await _repository.getConversationsForUser(userId);
       if (!mounted) return;
       setState(() {
         _conversations = conversations;
@@ -107,11 +110,21 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       MaterialPageRoute<void>(
         builder: (_) => ChatScreen(
           tripId: summary.tripId,
+          rideRequestId: summary.rideRequestId,
           currentUser: widget.currentUser,
           otherUserId: summary.otherUserId,
           otherUserName: summary.otherUserName,
           tripDeparture: summary.tripDeparture,
           tripDestination: summary.tripDestination,
+          requestDeparture: summary.isRideRequest
+              ? summary.tripDeparture
+              : null,
+          requestDestination: summary.isRideRequest
+              ? summary.tripDestination
+              : null,
+          requestDate: summary.requestDate,
+          requestTime: summary.requestTime,
+          requestSeats: summary.requestedSeats,
         ),
       ),
     );
@@ -128,9 +141,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
   bool get _isDriver => widget.currentUser.role == 'driver';
 
-  String get _emptyTitle => _isDriver
-      ? 'Aucune conversation'
-      : 'Aucune conversation';
+  String get _emptyTitle =>
+      _isDriver ? 'Aucune conversation' : 'Aucune conversation';
 
   String get _emptySubtitle => _isDriver
       ? 'Vous n\'avez encore aucune conversation avec vos passagers.'
@@ -211,132 +223,123 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   // Loading
   // ---------------------------------------------------------------------------
 
-  Widget _buildLoadingState() => const Center(
-        child: CircularProgressIndicator(color: _green),
-      );
+  Widget _buildLoadingState() =>
+      const Center(child: CircularProgressIndicator(color: _green));
 
   // ---------------------------------------------------------------------------
   // Error
   // ---------------------------------------------------------------------------
 
   Widget _buildErrorState(String message) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.cloud_off_rounded,
-                color: _secondaryBlue,
-                size: 42,
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Impossible de charger vos conversations',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _primaryBlue,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _textGrey,
-                  fontSize: 12,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 18),
-              ElevatedButton.icon(
-                onPressed: _loadConversations,
-                icon: const Icon(Icons.refresh_rounded, size: 17),
-                label: const Text('Réessayer'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _secondaryBlue,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                ),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: _secondaryBlue, size: 42),
+          const SizedBox(height: 14),
+          const Text(
+            'Impossible de charger vos conversations',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _primaryBlue,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 7),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _textGrey, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(
+            onPressed: _loadConversations,
+            icon: const Icon(Icons.refresh_rounded, size: 17),
+            label: const Text('Réessayer'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _secondaryBlue,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(13),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   // ---------------------------------------------------------------------------
   // Empty — scrollable so RefreshIndicator works on it too.
   // ---------------------------------------------------------------------------
 
   Widget _buildEmptyState() => LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: SizedBox(
-            height: constraints.maxHeight,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: _green.withValues(alpha: 0.10),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        color: _green,
-                        size: 40,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      _emptyTitle,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: _primaryBlue,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _emptySubtitle,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _textGrey.withValues(alpha: 0.82),
-                        fontSize: 13,
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
+    builder: (context, constraints) => SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: constraints.maxHeight,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: _green.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: _green,
+                    size: 40,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 20),
+                Text(
+                  _emptyTitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: _primaryBlue,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _emptySubtitle,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _textGrey.withValues(alpha: 0.82),
+                    fontSize: 13,
+                    height: 1.45,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-      );
+      ),
+    ),
+  );
 
   // ---------------------------------------------------------------------------
   // Conversation list
   // ---------------------------------------------------------------------------
 
   Widget _buildConversationList() => ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(19, 0, 19, 26),
-        itemCount: _conversations.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, index) =>
-            _buildConversationCard(_conversations[index]),
-      );
+    physics: const AlwaysScrollableScrollPhysics(),
+    padding: const EdgeInsets.fromLTRB(19, 0, 19, 26),
+    itemCount: _conversations.length,
+    separatorBuilder: (_, _) => const SizedBox(height: 10),
+    itemBuilder: (context, index) =>
+        _buildConversationCard(_conversations[index]),
+  );
 
   // ---------------------------------------------------------------------------
   // Conversation card
@@ -433,6 +436,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
+                            '${summary.isRideRequest ? 'Demande' : 'Trajet'} · '
                             '${summary.tripDeparture} → ${summary.tripDestination}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -517,22 +521,19 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildUnreadBadge(int count) => Container(
-        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-        padding: const EdgeInsets.symmetric(horizontal: 5),
-        decoration: const BoxDecoration(
-          color: _green,
-          shape: BoxShape.circle,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          count > 99 ? '99+' : '$count',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
+    constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+    padding: const EdgeInsets.symmetric(horizontal: 5),
+    decoration: const BoxDecoration(color: _green, shape: BoxShape.circle),
+    alignment: Alignment.center,
+    child: Text(
+      count > 99 ? '99+' : '$count',
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
 
   // ---------------------------------------------------------------------------
   // Timestamp formatter
@@ -566,9 +567,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     final parts = name.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty) return '';
     if (parts.length == 1) {
-      return parts.first.isNotEmpty
-          ? parts.first[0].toUpperCase()
-          : '';
+      return parts.first.isNotEmpty ? parts.first[0].toUpperCase() : '';
     }
     final first = parts.first.isNotEmpty ? parts.first[0].toUpperCase() : '';
     final last = parts.last.isNotEmpty ? parts.last[0].toUpperCase() : '';

@@ -17,7 +17,8 @@ import '../../../repositories/message_repository.dart';
 
 class ChatScreen extends StatefulWidget {
   /// The trip this conversation belongs to.
-  final int tripId;
+  final int? tripId;
+  final int? rideRequestId;
 
   /// The currently authenticated user (sender).
   final User currentUser;
@@ -31,16 +32,27 @@ class ChatScreen extends StatefulWidget {
   /// Optional: displayed in the header as trip context.
   final String? tripDeparture;
   final String? tripDestination;
+  final String? requestDeparture;
+  final String? requestDestination;
+  final String? requestDate;
+  final String? requestTime;
+  final int? requestSeats;
 
   const ChatScreen({
     super.key,
     required this.tripId,
+    this.rideRequestId,
     required this.currentUser,
     required this.otherUserId,
     required this.otherUserName,
     this.tripDeparture,
     this.tripDestination,
-  });
+    this.requestDeparture,
+    this.requestDestination,
+    this.requestDate,
+    this.requestTime,
+    this.requestSeats,
+  }) : assert((tripId != null) != (rideRequestId != null));
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -129,18 +141,33 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       // Mark incoming messages as read before loading so the returned
       // list already reflects is_read = 1 for those messages.
-      await _repository.markConversationAsRead(
-        tripId: widget.tripId,
-        currentUserId: userId,
-        otherUserId: widget.otherUserId,
-      );
+      final requestId = widget.rideRequestId;
+      if (requestId != null) {
+        await _repository.markRideRequestConversationAsRead(
+          rideRequestId: requestId,
+          currentUserId: userId,
+          otherUserId: widget.otherUserId,
+        );
+      } else {
+        await _repository.markConversationAsRead(
+          tripId: widget.tripId!,
+          currentUserId: userId,
+          otherUserId: widget.otherUserId,
+        );
+      }
       if (!mounted) return;
 
-      final messages = await _repository.getConversation(
-        tripId: widget.tripId,
-        currentUserId: userId,
-        otherUserId: widget.otherUserId,
-      );
+      final messages = requestId != null
+          ? await _repository.getRideRequestConversation(
+              rideRequestId: requestId,
+              currentUserId: userId,
+              otherUserId: widget.otherUserId,
+            )
+          : await _repository.getConversation(
+              tripId: widget.tripId!,
+              currentUserId: userId,
+              otherUserId: widget.otherUserId,
+            );
       if (!mounted) return;
 
       setState(() {
@@ -184,23 +211,39 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _isSending = true);
 
     try {
-      await _repository.sendMessage(
-        tripId: widget.tripId,
-        senderId: userId,
-        receiverId: widget.otherUserId,
-        message: text,
-      );
+      final requestId = widget.rideRequestId;
+      if (requestId != null) {
+        await _repository.sendRideRequestMessage(
+          rideRequestId: requestId,
+          senderId: userId,
+          otherUserId: widget.otherUserId,
+          message: text,
+        );
+      } else {
+        await _repository.sendMessage(
+          tripId: widget.tripId!,
+          senderId: userId,
+          receiverId: widget.otherUserId,
+          message: text,
+        );
+      }
       if (!mounted) return;
 
       // Clear input immediately so it feels snappy.
       _inputController.clear();
 
       // Reload the conversation from SQLite — source of truth.
-      final messages = await _repository.getConversation(
-        tripId: widget.tripId,
-        currentUserId: userId,
-        otherUserId: widget.otherUserId,
-      );
+      final messages = requestId != null
+          ? await _repository.getRideRequestConversation(
+              rideRequestId: requestId,
+              currentUserId: userId,
+              otherUserId: widget.otherUserId,
+            )
+          : await _repository.getConversation(
+              tripId: widget.tripId!,
+              currentUserId: userId,
+              otherUserId: widget.otherUserId,
+            );
       if (!mounted) return;
 
       setState(() {
@@ -297,14 +340,15 @@ class _ChatScreenState extends State<ChatScreen> {
     final hasTripContext =
         (widget.tripDeparture?.trim().isNotEmpty == true) &&
         (widget.tripDestination?.trim().isNotEmpty == true);
+    final hasRequestRoute =
+        widget.requestDeparture?.trim().isNotEmpty == true &&
+        widget.requestDestination?.trim().isNotEmpty == true;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE2EBE7)),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFE2EBE7))),
       ),
       child: Row(
         children: [
@@ -315,10 +359,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: IconButton(
               tooltip: 'Retour',
               onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(
-                Icons.arrow_back_rounded,
-                color: _primaryBlue,
-              ),
+              icon: const Icon(Icons.arrow_back_rounded, color: _primaryBlue),
             ),
           ),
 
@@ -357,7 +398,30 @@ class _ChatScreenState extends State<ChatScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                if (hasTripContext) ...[
+                if (widget.rideRequestId != null) ...[
+                  const SizedBox(height: 2),
+                  const Text(
+                    'À propos de cette demande',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _textGrey,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (hasRequestRoute)
+                    Text(
+                      '${widget.requestDeparture} → ${widget.requestDestination}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _textGrey,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                ] else if (hasTripContext) ...[
                   const SizedBox(height: 2),
                   Text(
                     '${widget.tripDeparture} → ${widget.tripDestination}',
@@ -395,173 +459,160 @@ class _ChatScreenState extends State<ChatScreen> {
   // Loading state
   // ---------------------------------------------------------------------------
 
-  Widget _buildLoadingState() => const Center(
-        child: CircularProgressIndicator(color: _green),
-      );
+  Widget _buildLoadingState() =>
+      const Center(child: CircularProgressIndicator(color: _green));
 
   // ---------------------------------------------------------------------------
   // Access-denied state
   // ---------------------------------------------------------------------------
 
   Widget _buildAccessDeniedState() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFECEC),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  Icons.lock_outline_rounded,
-                  color: Color(0xFFB63A3A),
-                  size: 34,
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Conversation non disponible',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _primaryBlue,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _loadError ??
-                    'Vous n\'êtes pas autorisé à accéder à cette conversation.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _textGrey.withValues(alpha: 0.82),
-                  fontSize: 13,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 22),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.arrow_back_rounded, size: 17),
-                label: const Text('Retour'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _secondaryBlue,
-                  side: const BorderSide(color: Color(0xFFDCE7E3)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                ),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFECEC),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Icon(
+              Icons.lock_outline_rounded,
+              color: Color(0xFFB63A3A),
+              size: 34,
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 18),
+          const Text(
+            'Conversation non disponible',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _primaryBlue,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _loadError ??
+                'Vous n\'êtes pas autorisé à accéder à cette conversation.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _textGrey.withValues(alpha: 0.82),
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 22),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.arrow_back_rounded, size: 17),
+            label: const Text('Retour'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _secondaryBlue,
+              side: const BorderSide(color: Color(0xFFDCE7E3)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(13),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   // ---------------------------------------------------------------------------
   // Error state
   // ---------------------------------------------------------------------------
 
   Widget _buildErrorState() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.cloud_off_rounded,
-                color: _secondaryBlue,
-                size: 42,
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Impossible de charger la conversation',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _primaryBlue,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                _loadError ?? 'Vérifiez votre connexion puis réessayez.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _textGrey,
-                  fontSize: 12,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 18),
-              ElevatedButton.icon(
-                onPressed: _loadConversation,
-                icon: const Icon(Icons.refresh_rounded, size: 17),
-                label: const Text('Réessayer'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _secondaryBlue,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                ),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: _secondaryBlue, size: 42),
+          const SizedBox(height: 14),
+          const Text(
+            'Impossible de charger la conversation',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _primaryBlue,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 7),
+          Text(
+            _loadError ?? 'Vérifiez votre connexion puis réessayez.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _textGrey, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(
+            onPressed: _loadConversation,
+            icon: const Icon(Icons.refresh_rounded, size: 17),
+            label: const Text('Réessayer'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _secondaryBlue,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(13),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   // ---------------------------------------------------------------------------
   // Empty state (ready but no messages yet)
   // ---------------------------------------------------------------------------
 
   Widget _buildEmptyState() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: _green.withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  color: _green,
-                  size: 36,
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Commencez la conversation',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _primaryBlue,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Envoyez votre premier message.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _textGrey,
-                  fontSize: 13,
-                  height: 1.45,
-                ),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: _green.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: _green,
+              size: 36,
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 18),
+          const Text(
+            'Commencez la conversation',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _primaryBlue,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Envoyez votre premier message.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: _textGrey, fontSize: 13, height: 1.45),
+          ),
+        ],
+      ),
+    ),
+  );
 
   // ---------------------------------------------------------------------------
   // Message list
@@ -579,11 +630,9 @@ class _ChatScreenState extends State<ChatScreen> {
         final isOwn = message.senderId == widget.currentUser.id;
 
         // Show a date separator when the day changes between messages.
-        final showSeparator = index == 0 ||
-            !_sameDay(
-              _messages[index - 1].createdAt,
-              message.createdAt,
-            );
+        final showSeparator =
+            index == 0 ||
+            !_sameDay(_messages[index - 1].createdAt, message.createdAt);
 
         return Column(
           children: [
@@ -632,8 +681,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
-        mainAxisAlignment:
-            isOwn ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isOwn
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isOwn) ...[
@@ -641,15 +691,18 @@ class _ChatScreenState extends State<ChatScreen> {
             const CircleAvatar(
               radius: 14,
               backgroundColor: _lightBlue,
-              child: Icon(Icons.person_rounded, color: _secondaryBlue, size: 16),
+              child: Icon(
+                Icons.person_rounded,
+                color: _secondaryBlue,
+                size: 16,
+              ),
             ),
             const SizedBox(width: 7),
           ],
 
           ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth:
-                  MediaQuery.sizeOf(context).width * maxBubbleWidth,
+              maxWidth: MediaQuery.sizeOf(context).width * maxBubbleWidth,
             ),
             child: Column(
               crossAxisAlignment: isOwn
@@ -711,7 +764,11 @@ class _ChatScreenState extends State<ChatScreen> {
             const CircleAvatar(
               radius: 14,
               backgroundColor: _lightBlue,
-              child: Icon(Icons.person_rounded, color: _secondaryBlue, size: 16),
+              child: Icon(
+                Icons.person_rounded,
+                color: _secondaryBlue,
+                size: 16,
+              ),
             ),
           ],
         ],
@@ -728,9 +785,7 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Color(0xFFE2EBE7)),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFFE2EBE7))),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -754,10 +809,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 onSubmitted: (_) {
                   if (_canSend) _sendMessage();
                 },
-                style: const TextStyle(
-                  color: _primaryBlue,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: _primaryBlue, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Votre message…',
                   hintStyle: TextStyle(

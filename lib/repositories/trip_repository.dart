@@ -10,6 +10,43 @@ enum TripSort { earliest, cheapest, bestRated }
 class TripRepository {
   final DatabaseHelper _databaseHelper = DatabaseHelper.instance;
 
+  Future<List<Trip>> getTripsForCommunityFeed({int limit = 50}) async {
+    final db = await _databaseHelper.database;
+    final now = DateTime.now();
+    final today =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    final currentTime =
+        '${now.hour.toString().padLeft(2, '0')}:'
+        '${now.minute.toString().padLeft(2, '0')}';
+    final rows = await db.rawQuery(
+      '''
+      SELECT trips.*,
+        drivers.full_name AS driver_name,
+        drivers.is_verified AS driver_is_verified,
+        drivers.profile_image AS driver_profile_image,
+        (SELECT AVG(ratings.score) FROM ratings WHERE ratings.reviewed_id = drivers.id) AS driver_rating
+      FROM trips
+      INNER JOIN users AS drivers
+        ON drivers.id = trips.driver_id
+        AND drivers.role = 'driver'
+        AND drivers.is_active = 1
+      INNER JOIN vehicles
+        ON vehicles.id = trips.vehicle_id
+        AND vehicles.user_id = trips.driver_id
+      WHERE trips.status = 'available'
+        AND trips.available_seats > 0
+        AND (trips.departure_date > ? OR
+          (trips.departure_date = ? AND trips.departure_time >= ?))
+      ORDER BY trips.created_at DESC, trips.id DESC
+      LIMIT ?
+      ''',
+      [today, today, currentTime, limit.clamp(1, 100)],
+    );
+    return rows.map(Trip.fromMap).toList(growable: false);
+  }
+
   Future<List<Trip>> getAllTripsForAdmin() async {
     final db = await _databaseHelper.database;
     final rows = await db.rawQuery('''

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../database/database_helper.dart';
 import '../models/message.dart';
@@ -12,7 +13,8 @@ import 'notification_repository.dart';
 // ---------------------------------------------------------------------------
 
 class ConversationSummary {
-  final int tripId;
+  final int? tripId;
+  final int? rideRequestId;
   final int otherUserId;
   final String otherUserName;
   final String? otherUserImage;
@@ -21,9 +23,15 @@ class ConversationSummary {
   final String lastMessage;
   final String lastMessageAt;
   final int unreadCount;
+  final String? requestDate;
+  final String? requestTime;
+  final int? requestedSeats;
+
+  bool get isRideRequest => rideRequestId != null;
 
   const ConversationSummary({
     required this.tripId,
+    required this.rideRequestId,
     required this.otherUserId,
     required this.otherUserName,
     required this.otherUserImage,
@@ -32,19 +40,26 @@ class ConversationSummary {
     required this.lastMessage,
     required this.lastMessageAt,
     required this.unreadCount,
+    this.requestDate,
+    this.requestTime,
+    this.requestedSeats,
   });
 
   factory ConversationSummary.fromMap(Map<String, Object?> map) =>
       ConversationSummary(
-        tripId: map['trip_id'] as int,
+        tripId: map['trip_id'] as int?,
+        rideRequestId: map['ride_request_id'] as int?,
         otherUserId: map['other_user_id'] as int,
         otherUserName: map['other_user_name'] as String,
         otherUserImage: map['other_user_image'] as String?,
-        tripDeparture: map['trip_departure'] as String,
-        tripDestination: map['trip_destination'] as String,
+        tripDeparture: map['trip_departure'] as String? ?? '',
+        tripDestination: map['trip_destination'] as String? ?? '',
         lastMessage: map['last_message'] as String,
         lastMessageAt: map['last_message_at'] as String,
         unreadCount: map['unread_count'] as int? ?? 0,
+        requestDate: map['request_date'] as String?,
+        requestTime: map['request_time'] as String?,
+        requestedSeats: map['requested_seats'] as int?,
       );
 }
 
@@ -93,7 +108,8 @@ class MessageRepository {
     }
     if (senderId == receiverId) {
       throw ArgumentError(
-          'L\'expéditeur et le destinataire doivent être différents.');
+        'L\'expéditeur et le destinataire doivent être différents.',
+      );
     }
 
     final db = await _databaseHelper.database;
@@ -116,7 +132,8 @@ class MessageRepository {
       final tripStatus = trip['status'] as String;
       if (tripStatus == 'cancelled') {
         throw StateError(
-            'Impossible d\'envoyer un message pour un trajet annulé.');
+          'Impossible d\'envoyer un message pour un trajet annulé.',
+        );
       }
 
       // 2. Sender must exist and be active.
@@ -220,6 +237,272 @@ class MessageRepository {
     return insertedId;
   }
 
+  Future<int> sendRideRequestMessage({
+    required int rideRequestId,
+    required int senderId,
+    required int otherUserId,
+    required String message,
+  }) async {
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Le message ne peut pas être vide.');
+    }
+    if (trimmed.length > _maxMessageLength) {
+      throw ArgumentError(
+        'Le message dépasse la limite de $_maxMessageLength caractères.',
+      );
+    }
+
+    final db = await _databaseHelper.database;
+    final now = DateTime.now().toIso8601String();
+    final insertedId = await db.transaction<int>((txn) async {
+      final requestRows = await txn.query(
+        'ride_requests',
+        columns: ['passenger_id', 'status'],
+        where: 'id = ?',
+        whereArgs: [rideRequestId],
+        limit: 1,
+      );
+      if (requestRows.isEmpty || requestRows.first['status'] != 'active') {
+        throw StateError('Cette demande n’est plus disponible.');
+      }
+      final passengerId = requestRows.first['passenger_id'] as int;
+      if (passengerId == senderId && otherUserId == senderId) {
+        throw StateError('Vous ne pouvez pas vous envoyer un message.');
+      }
+
+      final senderRows = await txn.query(
+        'users',
+        columns: ['full_name', 'role'],
+        where: 'id = ? AND is_active = 1',
+        whereArgs: [senderId],
+        limit: 1,
+      );
+      if (senderRows.isEmpty) {
+        throw StateError('Le compte expéditeur est invalide ou désactivé.');
+      }
+      final passengerRows = await txn.query(
+        'users',
+        columns: ['id', 'role', 'is_active'],
+        where: "id = ? AND role = 'passenger' AND is_active = 1",
+        whereArgs: [passengerId],
+        limit: 1,
+      );
+      if (passengerRows.isEmpty) {
+        throw StateError('Le passager n’est plus disponible.');
+      }
+
+      late final int receiverId;
+      if (senderId == passengerId) {
+        if (senderRows.first['role'] != 'passenger') {
+          throw StateError('Ce compte ne peut pas répondre à cette demande.');
+        }
+        final driverRows = await txn.query(
+          'users',
+          columns: ['id'],
+          where: "id = ? AND role = 'driver' AND is_active = 1",
+          whereArgs: [otherUserId],
+          limit: 1,
+        );
+        if (driverRows.isEmpty) {
+          throw StateError('Le conducteur de cette conversation est invalide.');
+        }
+        final priorMessages = await txn.query(
+          'messages',
+          columns: ['id'],
+          where: '''ride_request_id = ? AND
+            ((sender_id = ? AND receiver_id = ?) OR
+             (sender_id = ? AND receiver_id = ?))''',
+          whereArgs: [
+            rideRequestId,
+            passengerId,
+            otherUserId,
+            otherUserId,
+            passengerId,
+          ],
+          limit: 1,
+        );
+        if (priorMessages.isEmpty) {
+          throw StateError(
+            'Vous ne pouvez répondre qu’à un conducteur qui vous a contacté.',
+          );
+        }
+        receiverId = otherUserId;
+      } else {
+        if (senderRows.first['role'] != 'driver' ||
+            otherUserId != passengerId) {
+          throw StateError(
+            'Seul un conducteur peut contacter le propriétaire de cette demande.',
+          );
+        }
+        receiverId = passengerId;
+      }
+
+      final messageId = await txn.insert('messages', {
+        'trip_id': null,
+        'ride_request_id': rideRequestId,
+        'sender_id': senderId,
+        'receiver_id': receiverId,
+        'message': trimmed,
+        'is_read': 0,
+        'created_at': now,
+      });
+      if (messageId <= 0) throw StateError('L’insertion du message a échoué.');
+
+      await NotificationRepository.insertInTransaction(
+        transaction: txn,
+        userId: receiverId,
+        title: 'Nouveau message',
+        body: '${senderRows.first['full_name']} vous a envoyé un message.',
+        type: 'message:$messageId;request:$rideRequestId',
+        createdAt: now,
+      );
+      return messageId;
+    });
+
+    _notifyChanged();
+    NotificationRepository.notifyChanged();
+    return insertedId;
+  }
+
+  Future<void> _validateRideRequestConversation({
+    required DatabaseExecutor executor,
+    required int rideRequestId,
+    required int currentUserId,
+    required int otherUserId,
+  }) async {
+    if (currentUserId == otherUserId) {
+      throw StateError('Une conversation doit avoir deux participants.');
+    }
+    final requests = await executor.query(
+      'ride_requests',
+      columns: ['passenger_id', 'status'],
+      where: 'id = ?',
+      whereArgs: [rideRequestId],
+      limit: 1,
+    );
+    if (requests.isEmpty || requests.first['status'] != 'active') {
+      throw StateError('Cette demande n’est plus disponible.');
+    }
+    final ownerId = requests.first['passenger_id'] as int;
+    final users = await executor.query(
+      'users',
+      columns: ['id', 'role'],
+      where: 'id IN (?, ?) AND is_active = 1',
+      whereArgs: [currentUserId, otherUserId],
+    );
+    if (users.length != 2) {
+      throw StateError('Un participant n’est plus actif.');
+    }
+    final roles = {
+      for (final row in users) row['id'] as int: row['role'] as String,
+    };
+    if (roles[ownerId] != 'passenger') {
+      throw StateError('Le propriétaire de la demande n’est plus disponible.');
+    }
+
+    if (currentUserId == ownerId) {
+      if (roles[otherUserId] != 'driver') {
+        throw StateError('Cette conversation n’est pas autorisée.');
+      }
+      final existing = await executor.query(
+        'messages',
+        columns: ['id'],
+        where: '''ride_request_id = ? AND
+          ((sender_id = ? AND receiver_id = ?) OR
+           (sender_id = ? AND receiver_id = ?))''',
+        whereArgs: [
+          rideRequestId,
+          currentUserId,
+          otherUserId,
+          otherUserId,
+          currentUserId,
+        ],
+        limit: 1,
+      );
+      if (existing.isEmpty) {
+        throw StateError('Cette conversation n’existe pas encore.');
+      }
+    } else if (roles[currentUserId] != 'driver' || otherUserId != ownerId) {
+      throw StateError('Vous ne pouvez pas accéder à cette conversation.');
+    }
+  }
+
+  Future<List<Message>> getRideRequestConversation({
+    required int rideRequestId,
+    required int currentUserId,
+    required int otherUserId,
+  }) async {
+    final db = await _databaseHelper.database;
+    return db.transaction<List<Message>>((txn) async {
+      await _validateRideRequestConversation(
+        executor: txn,
+        rideRequestId: rideRequestId,
+        currentUserId: currentUserId,
+        otherUserId: otherUserId,
+      );
+      final rows = await txn.query(
+        'messages',
+        where: '''ride_request_id = ? AND
+          ((sender_id = ? AND receiver_id = ?) OR
+           (sender_id = ? AND receiver_id = ?))''',
+        whereArgs: [
+          rideRequestId,
+          currentUserId,
+          otherUserId,
+          otherUserId,
+          currentUserId,
+        ],
+        orderBy: 'created_at ASC, id ASC',
+      );
+      return rows.map(Message.fromMap).toList(growable: false);
+    });
+  }
+
+  Future<void> markRideRequestConversationAsRead({
+    required int rideRequestId,
+    required int currentUserId,
+    required int otherUserId,
+  }) async {
+    final db = await _databaseHelper.database;
+    final updated = await db.transaction<int>((txn) async {
+      await _validateRideRequestConversation(
+        executor: txn,
+        rideRequestId: rideRequestId,
+        currentUserId: currentUserId,
+        otherUserId: otherUserId,
+      );
+      return txn.update(
+        'messages',
+        {'is_read': 1},
+        where: 'ride_request_id = ? AND receiver_id = ? AND sender_id = ? AND is_read = 0',
+        whereArgs: [rideRequestId, currentUserId, otherUserId],
+      );
+    });
+    if (updated > 0) _notifyChanged();
+  }
+
+  Future<int> getUnreadCountForRideRequestConversation({
+    required int rideRequestId,
+    required int currentUserId,
+    required int otherUserId,
+  }) async {
+    final db = await _databaseHelper.database;
+    await _validateRideRequestConversation(
+      executor: db,
+      rideRequestId: rideRequestId,
+      currentUserId: currentUserId,
+      otherUserId: otherUserId,
+    );
+    final rows = await db.rawQuery(
+      '''SELECT COUNT(*) AS unread_count FROM messages
+         WHERE ride_request_id = ? AND receiver_id = ?
+           AND sender_id = ? AND is_read = 0''',
+      [rideRequestId, currentUserId, otherUserId],
+    );
+    return rows.first['unread_count'] as int? ?? 0;
+  }
+
   // =========================================================================
   // 2. getConversation
   //
@@ -257,26 +540,29 @@ class MessageRepository {
   // Sorted newest-first.
   // =========================================================================
 
-  Future<List<ConversationSummary>> getConversationsForUser(
-    int userId,
-  ) async {
+  Future<List<ConversationSummary>> getConversationsForUser(int userId) async {
     final db = await _databaseHelper.database;
     final rows = await db.rawQuery(
       '''
       SELECT
         conv.trip_id,
+        conv.ride_request_id,
         conv.other_user_id,
         other_users.full_name     AS other_user_name,
         other_users.profile_image AS other_user_image,
-        trips.departure           AS trip_departure,
-        trips.destination         AS trip_destination,
+        COALESCE(trips.departure, requests.departure) AS trip_departure,
+        COALESCE(trips.destination, requests.destination) AS trip_destination,
+        requests.request_date AS request_date,
+        requests.request_time AS request_time,
+        requests.seats_requested AS requested_seats,
         latest.message            AS last_message,
         latest.created_at         AS last_message_at,
         COALESCE(
           (
             SELECT COUNT(*)
             FROM messages AS unread_msgs
-            WHERE unread_msgs.trip_id     = conv.trip_id
+            WHERE unread_msgs.trip_id IS conv.trip_id
+              AND unread_msgs.ride_request_id IS conv.ride_request_id
               AND unread_msgs.receiver_id = ?
               AND unread_msgs.sender_id   = conv.other_user_id
               AND unread_msgs.is_read     = 0
@@ -285,6 +571,7 @@ class MessageRepository {
       FROM (
         SELECT DISTINCT
           trip_id,
+          ride_request_id,
           CASE
             WHEN sender_id   = ? THEN receiver_id
             WHEN receiver_id = ? THEN sender_id
@@ -292,27 +579,31 @@ class MessageRepository {
         FROM messages
         WHERE sender_id = ? OR receiver_id = ?
       ) AS conv
-      INNER JOIN trips
-        ON trips.id = conv.trip_id
       INNER JOIN users AS other_users
         ON other_users.id = conv.other_user_id
+      LEFT JOIN trips
+        ON trips.id = conv.trip_id
+      LEFT JOIN ride_requests AS requests
+        ON requests.id = conv.ride_request_id
+        AND requests.status = 'active'
       INNER JOIN messages AS latest
         ON latest.id = (
-          SELECT id
-          FROM messages
-          WHERE trip_id = conv.trip_id
+          SELECT candidate.id
+          FROM messages AS candidate
+          WHERE candidate.trip_id IS conv.trip_id
+            AND candidate.ride_request_id IS conv.ride_request_id
             AND (
-                  (sender_id = ? AND receiver_id = conv.other_user_id)
-               OR (sender_id = conv.other_user_id AND receiver_id = ?)
+                  (candidate.sender_id = ? AND candidate.receiver_id = conv.other_user_id)
+               OR (candidate.sender_id = conv.other_user_id AND candidate.receiver_id = ?)
                 )
-          ORDER BY created_at DESC, id DESC
+          ORDER BY candidate.created_at DESC, candidate.id DESC
           LIMIT 1
         )
+      WHERE (conv.trip_id IS NOT NULL AND trips.id IS NOT NULL)
+         OR (conv.ride_request_id IS NOT NULL AND requests.id IS NOT NULL)
       ORDER BY latest.created_at DESC, latest.id DESC
       ''',
-      [
-        userId, userId, userId, userId, userId, userId, userId,
-      ],
+      [userId, userId, userId, userId, userId, userId, userId],
     );
     return rows.map(ConversationSummary.fromMap).toList(growable: false);
   }

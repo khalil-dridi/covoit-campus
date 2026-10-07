@@ -19,19 +19,14 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     final databasePath = await getDatabasesPath();
-    final path = join(
-      databasePath,
-      'covoit_campus.db',
-    );
+    final path = join(databasePath, 'covoit_campus.db');
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 5,
 
       onConfigure: (db) async {
-        await db.execute(
-          'PRAGMA foreign_keys = ON',
-        );
+        await db.execute('PRAGMA foreign_keys = ON');
       },
 
       onCreate: _onCreate,
@@ -44,10 +39,7 @@ class DatabaseHelper {
   // CREATE DATABASE
   // ==========================================================
 
-  Future<void> _onCreate(
-    Database db,
-    int version,
-  ) async {
+  Future<void> _onCreate(Database db, int version) async {
     // =========================
     // USERS
     // =========================
@@ -162,6 +154,8 @@ class DatabaseHelper {
       )
     ''');
 
+    await _createRideRequestsTable(db);
+
     // =========================
     // MESSAGES
     // =========================
@@ -169,14 +163,22 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        trip_id INTEGER NOT NULL,
+        trip_id INTEGER,
+        ride_request_id INTEGER,
         sender_id INTEGER NOT NULL,
         receiver_id INTEGER NOT NULL,
         message TEXT NOT NULL,
         is_read INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
+        CHECK (
+          (trip_id IS NOT NULL AND ride_request_id IS NULL) OR
+          (trip_id IS NULL AND ride_request_id IS NOT NULL)
+        ),
         FOREIGN KEY (trip_id)
           REFERENCES trips(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (ride_request_id)
+          REFERENCES ride_requests(id)
           ON DELETE CASCADE,
         FOREIGN KEY (sender_id)
           REFERENCES users(id)
@@ -309,11 +311,7 @@ class DatabaseHelper {
   // DATABASE UPGRADE
   // ==========================================================
 
-  Future<void> _onUpgrade(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createDefaultAdmin(db);
     }
@@ -329,22 +327,89 @@ class DatabaseHelper {
         );
       }
     }
+
+    if (oldVersion < 4) {
+      await _createRideRequestsTable(db);
+    }
+
+    if (oldVersion < 5) {
+      await _upgradeMessagesForRideRequests(db);
+    }
+  }
+
+  Future<void> _upgradeMessagesForRideRequests(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE messages_v5 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER,
+        ride_request_id INTEGER,
+        sender_id INTEGER NOT NULL,
+        receiver_id INTEGER NOT NULL,
+        message TEXT NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        CHECK (
+          (trip_id IS NOT NULL AND ride_request_id IS NULL) OR
+          (trip_id IS NULL AND ride_request_id IS NOT NULL)
+        ),
+        FOREIGN KEY (trip_id)
+          REFERENCES trips(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (ride_request_id)
+          REFERENCES ride_requests(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (sender_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE,
+        FOREIGN KEY (receiver_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      INSERT INTO messages_v5 (
+        id, trip_id, ride_request_id, sender_id, receiver_id,
+        message, is_read, created_at
+      )
+      SELECT id, trip_id, NULL, sender_id, receiver_id,
+        message, is_read, created_at
+      FROM messages
+    ''');
+    await db.execute('DROP TABLE messages');
+    await db.execute('ALTER TABLE messages_v5 RENAME TO messages');
+  }
+
+  Future<void> _createRideRequestsTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ride_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        passenger_id INTEGER NOT NULL,
+        departure TEXT NOT NULL,
+        destination TEXT NOT NULL,
+        request_date TEXT NOT NULL,
+        request_time TEXT,
+        seats_requested INTEGER NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (passenger_id)
+          REFERENCES users(id)
+          ON DELETE CASCADE
+      )
+    ''');
   }
 
   // ==========================================================
   // CREATE DEFAULT ADMIN
   // ==========================================================
 
-  Future<void> _createDefaultAdmin(
-    Database db,
-  ) async {
+  Future<void> _createDefaultAdmin(Database db) async {
     final existingAdmin = await db.query(
       'users',
       columns: ['id'],
       where: 'email = ?',
-      whereArgs: [
-        'admin@covoitcampus.tn',
-      ],
+      whereArgs: ['admin@covoitcampus.tn'],
       limit: 1,
     );
 
@@ -360,21 +425,18 @@ class DatabaseHelper {
     const adminPasswordHash =
         '4678a5d7a919ca64607484fa99faa368699da50437b343e3fcf198e157a682aa';
 
-    await db.insert(
-      'users',
-      {
-        'full_name': 'Administrateur',
-        'email': 'admin@covoitcampus.tn',
-        'password_hash': adminPasswordHash,
-        'phone': null,
-        'profile_image': null,
-        'university': null,
-        'role': 'admin',
-        'is_verified': 1,
-        'is_active': 1,
-        'created_at': now,
-        'updated_at': now,
-      },
-    );
+    await db.insert('users', {
+      'full_name': 'Administrateur',
+      'email': 'admin@covoitcampus.tn',
+      'password_hash': adminPasswordHash,
+      'phone': null,
+      'profile_image': null,
+      'university': null,
+      'role': 'admin',
+      'is_verified': 1,
+      'is_active': 1,
+      'created_at': now,
+      'updated_at': now,
+    });
   }
-}   
+}

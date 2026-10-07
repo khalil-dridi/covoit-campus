@@ -1,17 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
+import '../../../models/ride_request.dart';
+import '../../../models/trip.dart';
 import '../../../models/user.dart';
+import '../../../repositories/trip_repository.dart';
+import '../../../repositories/ride_request_repository.dart';
 import '../../../widgets/passenger/passenger_header.dart';
+import '../trips/trip_details_screen.dart';
+import '../requests/ride_request_form_screen.dart';
+import '../requests/ride_request_details_screen.dart';
 
-class PassengerHomeScreen extends StatelessWidget {
+class PassengerHomeScreen extends StatefulWidget {
   final User user;
   final VoidCallback onSearchTap;
+  final VoidCallback onNavigateToReservations;
 
   const PassengerHomeScreen({
     super.key,
     required this.user,
     required this.onSearchTap,
+    required this.onNavigateToReservations,
   });
+
+  @override
+  State<PassengerHomeScreen> createState() => _PassengerHomeScreenState();
 
   static const Color primaryBlue = Color(0xFF123D68);
   static const Color secondaryBlue = Color(0xFF1E5AA8);
@@ -22,93 +35,128 @@ class PassengerHomeScreen extends StatelessWidget {
   static const Color lightGreen = Color(0xFFE8F8F1);
   static const Color lightPink = Color(0xFFFFEFF0);
   static const Color lightYellow = Color(0xFFFFF5DE);
+}
+
+class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
+  static const Color primaryBlue = PassengerHomeScreen.primaryBlue;
+  static const Color secondaryBlue = PassengerHomeScreen.secondaryBlue;
+  static const Color green = PassengerHomeScreen.green;
+  static const Color background = PassengerHomeScreen.background;
+  static const Color textGrey = PassengerHomeScreen.textGrey;
+  static const Color lightBlue = PassengerHomeScreen.lightBlue;
+  static const Color lightGreen = PassengerHomeScreen.lightGreen;
+  static const Color lightPink = PassengerHomeScreen.lightPink;
+  static const Color lightYellow = PassengerHomeScreen.lightYellow;
+
+  final TripRepository _tripRepository = TripRepository();
+  final RideRequestRepository _rideRequestRepository = RideRequestRepository();
+  List<_CommunityPost> _feedPosts = const [];
+  bool _isLoading = true;
+  String? _loadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHomeData();
+  }
+
+  Future<void> _loadHomeData() async {
+    final passengerId = widget.user.id;
+    if (passengerId == null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Impossible d’identifier votre compte.';
+      });
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      final results = await Future.wait<Object>([
+        _tripRepository.getTripsForCommunityFeed(),
+        _rideRequestRepository.getActiveRequestsForCommunityFeed(),
+      ]);
+      if (!mounted) return;
+      final trips = results[0] as List<Trip>;
+      final requests = results[1] as List<RideRequest>;
+      final posts = <_CommunityPost>[
+        ...trips.map(_CommunityPost.trip),
+        ...requests.map(_CommunityPost.request),
+      ]..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+      setState(() {
+        _feedPosts = posts;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Impossible de charger le fil pour le moment.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeroSearch(context),
-              const SizedBox(height: 25),
-              const _SectionTitle(title: 'Accès rapides'),
-              const SizedBox(height: 12),
-              _buildQuickActions(context),
-              const SizedBox(height: 23),
-              _SectionTitle(
-                title: 'Votre prochain trajet',
-                action: 'Voir tout',
-                onTap: () => _showInfoDialog(
-                  context,
-                  title: 'Mes réservations',
-                  message: 'Vos réservations seront disponibles ici.',
+        child: RefreshIndicator(
+          color: green,
+          onRefresh: _loadHomeData,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                PassengerHeader(user: widget.user),
+                const SizedBox(height: 18),
+                _buildSearchCta(),
+                const SizedBox(height: 22),
+                _buildRideRequestCta(context),
+                const SizedBox(height: 25),
+                const _SectionTitle(title: 'Accès rapides'),
+                const SizedBox(height: 12),
+                _buildQuickActions(context),
+                const SizedBox(height: 25),
+                const _SectionTitle(title: 'Fil d’accueil'),
+                const SizedBox(height: 4),
+                Text(
+                  'Les dernières publications de la communauté',
+                  style: TextStyle(
+                    color: textGrey.withValues(alpha: 0.88),
+                    fontSize: 12,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 11),
-              _buildEmptyState(
-                icon: Icons.calendar_today_rounded,
-                title: 'Aucun trajet à venir',
-                message: 'Vos prochaines réservations apparaîtront ici.',
-              ),
-              const SizedBox(height: 22),
-              _SectionTitle(
-                title: 'Trajets recommandés pour vous',
-                action: 'Voir tout',
-                onTap: () => _showInfoDialog(
-                  context,
-                  title: 'Trajets recommandés',
-                  message: 'Aucun trajet recommandé pour le moment.',
-                ),
-              ),
-              const SizedBox(height: 11),
-              _buildEmptyState(
-                icon: Icons.explore_outlined,
-                title: 'Aucun trajet recommandé',
-                message:
-                    'Les trajets disponibles apparaîtront ici lorsqu’ils '
-                    'correspondront à votre recherche.',
-              ),
-              const SizedBox(height: 22),
-              _buildEcoCard(),
-            ],
+                const SizedBox(height: 13),
+                _buildCommunityFeed(context),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildHeroSearch(BuildContext context) {
-    return Stack(
-      children: [
-        const SizedBox(height: 276),
-        PassengerHeader(
-          user: user,
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 222, 8, 0),
-          child: _buildSearchCard(context),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSearchCard(BuildContext context) {
+  Widget _buildSearchCta() {
     return Container(
-      padding: const EdgeInsets.all(17),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: const Color(0xFFE6ECE9)),
         boxShadow: [
           BoxShadow(
-            color: primaryBlue.withValues(alpha: 0.12),
-            blurRadius: 24,
-            offset: const Offset(0, 9),
+            color: primaryBlue.withValues(alpha: 0.07),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -118,213 +166,62 @@ class PassengerHomeScreen extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 43,
-                height: 43,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   color: lightGreen,
-                  borderRadius: BorderRadius.circular(13),
+                  borderRadius: BorderRadius.circular(15),
                 ),
-                child: const Icon(Icons.search_rounded, color: green, size: 23),
+                child: const Icon(Icons.search_rounded, color: green, size: 24),
               ),
-              const SizedBox(width: 11),
+              const SizedBox(width: 13),
               const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Rechercher un trajet',
+                      'Trouvez votre prochain trajet',
                       style: TextStyle(
                         color: primaryBlue,
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    SizedBox(height: 3),
+                    SizedBox(height: 4),
                     Text(
-                      'Trouver un trajet parmi les étudiants',
-                      maxLines: 1,
+                      'Parcourez les trajets proposés par la communauté.',
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: textGrey, fontSize: 11),
+                      style: TextStyle(
+                        color: textGrey,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 4),
-              _swapButton(),
             ],
           ),
-          const SizedBox(height: 15),
-          _buildSearchField(
-            context,
-            icon: Icons.trip_origin_rounded,
-            iconColor: green,
-            label: 'Ville de départ',
-            value: 'Choisir une ville',
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 22),
-            child: Container(
-              height: 10,
-              width: 1,
-              color: const Color(0xFFD9E4E0),
-            ),
-          ),
-          _buildSearchField(
-            context,
-            icon: Icons.location_on_rounded,
-            iconColor: secondaryBlue,
-            label: 'Ville d’arrivée',
-            value: 'Choisir une destination',
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildCompactField(
-                  context,
-                  icon: Icons.calendar_today_rounded,
-                  label: 'Date du trajet',
-                  value: 'Choisir une date',
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: _buildCompactField(
-                  context,
-                  icon: Icons.access_time_rounded,
-                  label: 'Heure',
-                  value: 'Ajouter une heure',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            height: 49,
+            height: 52,
             child: ElevatedButton.icon(
-              onPressed: onSearchTap,
+              onPressed: widget.onSearchTap,
               icon: const Icon(Icons.search_rounded, size: 19),
               label: const Text(
                 'Rechercher un trajet',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: green,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _swapButton() {
-    return SizedBox(
-      width: 34,
-      height: 34,
-      child: IconButton(
-        tooltip: 'Inverser les villes',
-        padding: EdgeInsets.zero,
-        onPressed: onSearchTap,
-        icon: const Icon(
-          Icons.swap_vert_rounded,
-          color: secondaryBlue,
-          size: 22,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchField(
-    BuildContext context, {
-    required IconData icon,
-    required Color iconColor,
-    required String label,
-    required String value,
-  }) {
-    return _SearchInputSurface(
-      onTap: onSearchTap,
-      child: Row(
-        children: [
-          Icon(icon, color: iconColor, size: 19),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: textGrey.withValues(alpha: 0.8),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: primaryBlue,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded, color: textGrey, size: 19),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactField(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return _SearchInputSurface(
-      onTap: onSearchTap,
-      compact: true,
-      child: Row(
-        children: [
-          Icon(icon, color: secondaryBlue, size: 16),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textGrey.withValues(alpha: 0.8),
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: primaryBlue,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -342,7 +239,7 @@ class PassengerHomeScreen extends StatelessWidget {
             title: 'Rechercher\nun trajet',
             foreground: secondaryBlue,
             surface: lightBlue,
-            onTap: onSearchTap,
+            onTap: widget.onSearchTap,
           ),
         ),
         const SizedBox(width: 7),
@@ -353,6 +250,7 @@ class PassengerHomeScreen extends StatelessWidget {
             title: 'Mes\nréservations',
             foreground: green,
             surface: lightGreen,
+            onTap: widget.onNavigateToReservations,
           ),
         ),
         const SizedBox(width: 7),
@@ -392,7 +290,8 @@ class PassengerHomeScreen extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: onTap ??
+        onTap:
+            onTap ??
             () => _showInfoDialog(
               context,
               title: title.replaceAll('\n', ' '),
@@ -488,52 +387,351 @@ class PassengerHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEcoCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: lightGreen,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: green.withValues(alpha: 0.14)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildCommunityFeed(BuildContext context) {
+    if (_isLoading) return const _HomeFeedLoading();
+    if (_loadError != null) {
+      return _HomeMessageCard(message: _loadError!, onRetry: _loadHomeData);
+    }
+    if (_feedPosts.isEmpty) {
+      return Column(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.85),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.eco_rounded, color: green, size: 23),
+          _buildEmptyState(
+            icon: Icons.dynamic_feed_rounded,
+            title: 'Le fil est encore calme',
+            message:
+                'Les nouvelles publications de la communauté apparaîtront ici.',
           ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: widget.onSearchTap,
+              icon: const Icon(Icons.search_rounded),
+              label: const Text('Rechercher un trajet'),
+              style: TextButton.styleFrom(foregroundColor: secondaryBlue),
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
+      children: _feedPosts
+          .map(
+            (post) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildFeedPost(context, post),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  Widget _buildFeedPost(BuildContext context, _CommunityPost post) {
+    final trip = post.trip;
+    final request = post.request;
+    final isTrip = trip != null;
+    final author = isTrip
+        ? (trip.driverName.trim().isEmpty ? 'Conducteur' : trip.driverName)
+        : (request?.passengerName?.trim().isNotEmpty == true
+              ? request!.passengerName!
+              : 'Passager');
+    final avatar = isTrip ? trip.driverProfileImage : request?.passengerImage;
+    final badgeColor = isTrip ? green : secondaryBlue;
+    final route = isTrip
+        ? '${trip.departure} → ${trip.destination}'
+        : '${request!.departure} → ${request.destination}';
+    final travelDate = isTrip
+        ? _tripDateTime(trip.departureDate, trip.departureTime)
+        : _requestDateTime(request!.requestDate, request.requestTime);
+    final metadata = isTrip
+        ? '${trip.availableSeats} ${trip.availableSeats == 1 ? 'place disponible' : 'places disponibles'}  ·  ${NumberFormat('0.##', 'fr_FR').format(trip.price)} TND'
+        : '${request!.seatsRequested} ${request.seatsRequested == 1 ? 'place souhaitée' : 'places souhaitées'}';
+    final description = isTrip ? trip.description : request?.description;
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () {
+          if (trip?.id != null) {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    TripDetailsScreen(tripId: trip!.id!, user: widget.user),
+              ),
+            );
+          } else if (request != null) {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => RideRequestDetailsScreen(
+                  request: request,
+                  currentUser: widget.user,
+                ),
+              ),
+            );
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE4ECE8)),
+            boxShadow: [
+              BoxShadow(
+                color: primaryBlue.withValues(alpha: .045),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _feedAvatar(author, avatar, isTrip),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          author,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: primaryBlue,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${isTrip ? 'Conducteur' : 'Recherche un trajet'} · ${_publicationLabel(post.publishedAt)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: textGrey,
+                            fontSize: 10.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: .1),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      isTrip ? 'TRAJET' : 'DEMANDE',
+                      style: TextStyle(
+                        color: badgeColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 17),
+              Text(
+                route,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: primaryBlue,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _feedInfo(Icons.calendar_month_rounded, travelDate),
+              const SizedBox(height: 7),
+              _feedInfo(
+                isTrip ? Icons.event_seat_outlined : Icons.groups_2_outlined,
+                metadata,
+              ),
+              if (description?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 11),
                 Text(
-                  'Ensemble pour un campus plus vert',
+                  description!.trim(),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: textGrey,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  isTrip ? 'Voir le trajet  ›' : 'Voir la demande  ›',
                   style: TextStyle(
-                    color: primaryBlue,
-                    fontSize: 13,
+                    color: isTrip ? green : secondaryBlue,
+                    fontSize: 12,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                SizedBox(height: 6),
-                Text(
-                  'Le covoiturage réduit les émissions de CO₂ et renforce '
-                  'la communauté étudiante.',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _feedInfo(IconData icon, String label) => Row(
+    children: [
+      Icon(icon, size: 16, color: secondaryBlue),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          label,
+          style: const TextStyle(color: textGrey, fontSize: 11.5),
+        ),
+      ),
+    ],
+  );
+
+  Widget _feedAvatar(String name, String? image, bool isTrip) {
+    final source = image?.trim();
+    final uri = source == null ? null : Uri.tryParse(source);
+    final network =
+        uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+    final asset = source?.startsWith('assets/') == true;
+    ImageProvider<Object>? provider;
+    if (source != null && source.isNotEmpty && network) {
+      provider = NetworkImage(source);
+    } else if (source != null && source.isNotEmpty && asset) {
+      provider = AssetImage(source);
+    }
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    final initials = parts.isEmpty
+        ? '?'
+        : parts.take(2).map((part) => part[0].toUpperCase()).join();
+    return CircleAvatar(
+      radius: 21,
+      backgroundColor: isTrip ? lightGreen : lightBlue,
+      foregroundImage: provider,
+      onForegroundImageError: provider is NetworkImage ? (_, _) {} : null,
+      child: Text(
+        initials,
+        style: TextStyle(
+          color: isTrip ? green : secondaryBlue,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  String _tripDateTime(String date, String time) {
+    final parsed = DateTime.tryParse('$date $time');
+    return parsed == null
+        ? '$date · $time'
+        : DateFormat('d MMM · HH:mm', 'fr_FR').format(parsed);
+  }
+
+  String _requestDateTime(String date, String? time) {
+    final parsed = DateTime.tryParse(date);
+    final dateLabel = parsed == null
+        ? date
+        : DateFormat('d MMM', 'fr_FR').format(parsed);
+    return time?.trim().isNotEmpty == true
+        ? '$dateLabel · ${time!.trim()}'
+        : '$dateLabel · Heure à préciser';
+  }
+
+  String _publicationLabel(DateTime value) {
+    final publishedAt = value.toLocal();
+    final difference = DateTime.now().difference(publishedAt);
+    if (difference.inSeconds < 60) return 'À l’instant';
+    if (difference.inMinutes < 60) return 'Il y a ${difference.inMinutes} min';
+    if (difference.inHours < 24 && publishedAt.day == DateTime.now().day) {
+      return 'Il y a ${difference.inHours} h';
+    }
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    if (publishedAt.year == yesterday.year &&
+        publishedAt.month == yesterday.month &&
+        publishedAt.day == yesterday.day) {
+      return 'Hier';
+    }
+    return DateFormat('d MMM', 'fr_FR').format(publishedAt);
+  }
+
+  Widget _buildRideRequestCta(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: primaryBlue,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: primaryBlue.withValues(alpha: .13),
+            blurRadius: 18,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.campaign_rounded, color: Colors.white, size: 30),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Besoin d’un trajet ?',
                   style: TextStyle(
-                    color: textGrey,
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Publiez une demande de covoiturage.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: .82),
                     fontSize: 11.5,
-                    height: 1.45,
                   ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filled(
+            tooltip: 'Publier une demande',
+            style: IconButton.styleFrom(
+              backgroundColor: green,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final created = await Navigator.of(context).push<bool>(
+                MaterialPageRoute<bool>(
+                  builder: (_) => RideRequestFormScreen(user: widget.user),
+                ),
+              );
+              if (created == true && mounted) await _loadHomeData();
+            },
+            icon: const Icon(Icons.arrow_forward_rounded),
           ),
         ],
       ),
@@ -615,10 +813,7 @@ class PassengerHomeScreen extends StatelessWidget {
                   ),
                   child: const Text(
                     'Compris',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                   ),
                 ),
               ),
@@ -632,14 +827,8 @@ class PassengerHomeScreen extends StatelessWidget {
 
 class _SectionTitle extends StatelessWidget {
   final String title;
-  final String? action;
-  final VoidCallback? onTap;
 
-  const _SectionTitle({
-    required this.title,
-    this.action,
-    this.onTap,
-  });
+  const _SectionTitle({required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -657,57 +846,103 @@ class _SectionTitle extends StatelessWidget {
             ),
           ),
         ),
-        if (action != null)
-          TextButton(
-            onPressed: onTap,
-            style: TextButton.styleFrom(
-              foregroundColor: PassengerHomeScreen.secondaryBlue,
-              padding: const EdgeInsets.only(left: 8),
-              minimumSize: const Size(58, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              '$action  ›',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-            ),
-          ),
       ],
     );
   }
 }
 
-class _SearchInputSurface extends StatelessWidget {
-  final Widget child;
-  final VoidCallback onTap;
-  final bool compact;
-
-  const _SearchInputSurface({
-    required this.child,
-    required this.onTap,
-    this.compact = false,
-  });
+class _HomeMessageCard extends StatelessWidget {
+  final String message;
+  final Future<void> Function() onRetry;
+  const _HomeMessageCard({required this.message, required this.onRetry});
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFFCFDFC),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          constraints: BoxConstraints(minHeight: compact ? 52 : 58),
-          padding: EdgeInsets.symmetric(
-            horizontal: compact ? 9 : 12,
-            vertical: compact ? 8 : 9,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFDCE7E3)),
-          ),
-          child: child,
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.cloud_off_rounded,
+          color: PassengerHomeScreen.textGrey,
         ),
-      ),
-    );
-  }
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(
+              color: PassengerHomeScreen.textGrey,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh_rounded),
+          color: PassengerHomeScreen.secondaryBlue,
+        ),
+      ],
+    ),
+  );
+}
+
+class _CommunityPost {
+  final Trip? trip;
+  final RideRequest? request;
+  final DateTime publishedAt;
+
+  const _CommunityPost._({this.trip, this.request, required this.publishedAt});
+
+  factory _CommunityPost.trip(Trip trip) => _CommunityPost._(
+    trip: trip,
+    publishedAt:
+        DateTime.tryParse(trip.createdAt) ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+  );
+
+  factory _CommunityPost.request(RideRequest request) => _CommunityPost._(
+    request: request,
+    publishedAt:
+        DateTime.tryParse(request.createdAt) ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+  );
+}
+
+class _HomeFeedLoading extends StatelessWidget {
+  const _HomeFeedLoading();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFE4ECE8)),
+    ),
+    child: const Row(
+      children: [
+        SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: PassengerHomeScreen.green,
+          ),
+        ),
+        SizedBox(width: 13),
+        Text(
+          'Chargement du fil…',
+          style: TextStyle(
+            color: PassengerHomeScreen.textGrey,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
 }

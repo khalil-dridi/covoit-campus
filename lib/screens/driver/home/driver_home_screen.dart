@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/trip.dart';
+import '../../../models/ride_request.dart';
 import '../../../models/user.dart';
 import '../../../models/vehicle.dart';
 import '../../../repositories/driver_home_repository.dart';
+import '../../../repositories/ride_request_repository.dart';
 import '../../../widgets/driver/driver_header.dart';
+import '../../passenger/requests/ride_request_details_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   final User user;
@@ -36,8 +39,12 @@ class DriverHomeScreenState extends State<DriverHomeScreen> {
   static const Color lightPink = Color(0xFFFFEFF0);
 
   final DriverHomeRepository _repository = DriverHomeRepository();
+  final RideRequestRepository _rideRequestRepository = RideRequestRepository();
   final GlobalKey _requestsKey = GlobalKey();
   DriverHomeData? _data;
+  List<RideRequest> _passengerRideRequests = const [];
+  bool _isLoadingPassengerRideRequests = true;
+  bool _passengerRideRequestsFailed = false;
   bool _isLoading = true;
   String? _loadError;
 
@@ -45,6 +52,7 @@ class DriverHomeScreenState extends State<DriverHomeScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _loadPassengerRideRequests();
   }
 
   Future<void> _loadData() async {
@@ -77,7 +85,28 @@ class DriverHomeScreenState extends State<DriverHomeScreen> {
     }
   }
 
-  Future<void> refresh() => _loadData();
+  Future<void> refresh() async {
+    await Future.wait([_loadData(), _loadPassengerRideRequests()]);
+  }
+
+  Future<void> _loadPassengerRideRequests() async {
+    try {
+      final requests = await _rideRequestRepository
+          .getActiveRequestsForCommunityFeed();
+      if (!mounted) return;
+      setState(() {
+        _passengerRideRequests = requests;
+        _isLoadingPassengerRideRequests = false;
+        _passengerRideRequestsFailed = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingPassengerRideRequests = false;
+        _passengerRideRequestsFailed = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +116,7 @@ class DriverHomeScreenState extends State<DriverHomeScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           color: green,
-          onRefresh: _loadData,
+          onRefresh: refresh,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
@@ -132,6 +161,8 @@ class DriverHomeScreenState extends State<DriverHomeScreen> {
                   ),
                 const SizedBox(height: 22),
                 _buildRequestsSection(data),
+                const SizedBox(height: 22),
+                _buildPassengerRideRequests(),
                 const SizedBox(height: 22),
                 _buildStatistics(data),
                 const SizedBox(height: 22),
@@ -579,6 +610,121 @@ class DriverHomeScreenState extends State<DriverHomeScreen> {
           else
             _buildRequestsList(data.requests, data.pendingRequests),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPassengerRideRequests() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeading(title: 'Demandes de trajet des passagers'),
+        const SizedBox(height: 11),
+        if (_isLoadingPassengerRideRequests)
+          const _LoadingPanel()
+        else if (_passengerRideRequestsFailed)
+          _emptyPanel(
+            icon: Icons.error_outline_rounded,
+            title: 'Demandes indisponibles',
+            message: 'Réessayez de charger les demandes des passagers.',
+            actionLabel: 'Réessayer',
+            onAction: _loadPassengerRideRequests,
+          )
+        else if (_passengerRideRequests.isEmpty)
+          _emptyPanel(
+            icon: Icons.chat_bubble_outline_rounded,
+            title: 'Aucune demande de trajet',
+            message: 'Les demandes actives des passagers apparaîtront ici.',
+          )
+        else
+          Container(
+            decoration: _cardDecoration(radius: 19),
+            child: Column(
+              children: [
+                for (var index = 0;
+                    index < _passengerRideRequests.length;
+                    index++) ...[
+                  _passengerRideRequestRow(_passengerRideRequests[index]),
+                  if (index < _passengerRideRequests.length - 1)
+                    const Divider(
+                      height: 1,
+                      indent: 63,
+                      color: Color(0xFFE6ECE9),
+                    ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _passengerRideRequestRow(RideRequest request) {
+    final passengerName = request.passengerName?.trim().isNotEmpty == true
+        ? request.passengerName!.trim()
+        : 'Passager';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(19),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RideRequestDetailsScreen(
+              request: request,
+              currentUser: widget.user,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              _passengerAvatar(request.passengerImage),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      passengerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: primaryBlue,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${request.departure} → ${request.destination}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: textGrey, fontSize: 10),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${request.seatsRequested} ${request.seatsRequested == 1 ? 'place' : 'places'} · ${request.requestDate}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: secondaryBlue,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 5),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: textGrey,
+                size: 19,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

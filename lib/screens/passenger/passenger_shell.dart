@@ -29,6 +29,7 @@ class _PassengerShellState extends State<PassengerShell> {
       PassengerHomeScreen(
         user: widget.user,
         onSearchTap: () => setState(() => _currentIndex = 1),
+        onNavigateToReservations: () => setState(() => _currentIndex = 2),
       ),
 
       PassengerSearchScreen(user: widget.user),
