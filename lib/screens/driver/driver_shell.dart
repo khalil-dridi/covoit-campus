@@ -48,10 +48,6 @@ class _DriverShellState extends State<DriverShell> {
           _homeKey.currentState?.refresh();
           _tripsKey.currentState?.refresh();
         },
-        onViewTripsTap: () {
-          setState(() => _currentIndex = 2);
-          _tripsKey.currentState?.refresh();
-        },
         onAddVehicleTap: () => setState(() => _currentIndex = 4),
       ),
       DriverTripsScreen(

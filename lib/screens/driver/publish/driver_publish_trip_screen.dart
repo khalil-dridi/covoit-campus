@@ -10,14 +10,12 @@ import '../../../widgets/driver/driver_header.dart';
 class DriverPublishTripScreen extends StatefulWidget {
   final User user;
   final VoidCallback? onTripPublished;
-  final VoidCallback? onViewTripsTap;
   final VoidCallback? onAddVehicleTap;
 
   const DriverPublishTripScreen({
     super.key,
     required this.user,
     this.onTripPublished,
-    this.onViewTripsTap,
     this.onAddVehicleTap,
   });
 
@@ -64,6 +62,7 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
   TimeOfDay? _time;
   int _availableSeats = 1;
   int _currentStep = 0;
+  bool _keepVehicleUnselectedAfterReset = false;
   bool _isLoadingVehicles = true;
   bool _isPublishing = false;
   String? _formError;
@@ -97,7 +96,9 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
         _selectedVehicle = vehicles
             .where((vehicle) => vehicle.id == _selectedVehicle?.id)
             .firstOrNull;
-        _selectedVehicle ??= vehicles.firstOrNull;
+        if (_selectedVehicle == null && !_keepVehicleUnselectedAfterReset) {
+          _selectedVehicle = vehicles.firstOrNull;
+        }
         _availableSeats = _availableSeats.clamp(1, _seatLimit);
         _isLoadingVehicles = false;
       });
@@ -636,6 +637,7 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
         child: InkWell(
           onTap: () => setState(() {
             _selectedVehicle = vehicle;
+            _keepVehicleUnselectedAfterReset = false;
             _availableSeats = _availableSeats.clamp(1, _seatLimit);
           }),
           borderRadius: BorderRadius.circular(15),
@@ -917,9 +919,9 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
         throw StateError('SQLite did not return a valid trip ID.');
       }
       if (!mounted) return;
-      setState(() => _isPublishing = false);
+      _resetPublishForm();
       widget.onTripPublished?.call();
-      await _showSuccess(tripId);
+      await _showSuccess();
     } catch (_) {
       if (!mounted) return;
       setState(() => _isPublishing = false);
@@ -933,21 +935,41 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
     }
   }
 
-  Future<void> _showSuccess(int tripId) async {
-    final viewTrips = await showDialog<bool>(
+  void _resetPublishForm() {
+    FocusScope.of(context).unfocus();
+    _priceController.clear();
+    _meetingPointController.clear();
+    _descriptionController.clear();
+    _dateAndPriceFormKey.currentState?.reset();
+    _meetingFormKey.currentState?.reset();
+    setState(() {
+      _currentStep = 0;
+      _departure = null;
+      _destination = null;
+      _date = null;
+      _time = null;
+      _availableSeats = 1;
+      _selectedVehicle = null;
+      _keepVehicleUnselectedAfterReset = true;
+      _formError = null;
+      _isLoadingVehicles = false;
+      _isPublishing = false;
+    });
+  }
+
+  Future<void> _showSuccess() async {
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => _CustomDialog(
         icon: Icons.check_rounded,
         title: 'Trajet publié !',
         message: 'Votre trajet a été publié avec succès.',
-        confirmLabel: 'Voir mes trajets',
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
+        confirmLabel: 'Terminé',
+        onConfirm: () => Navigator.of(dialogContext).pop(),
         showCancel: false,
       ),
     );
-    if (!mounted || viewTrips != true) return;
-    widget.onViewTripsTap?.call();
   }
 
   Widget _sectionCard({

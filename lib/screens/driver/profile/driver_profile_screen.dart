@@ -11,10 +11,7 @@ import '../../../utils/logout_flow.dart';
 class DriverProfileScreen extends StatefulWidget {
   final User user;
 
-  const DriverProfileScreen({
-    super.key,
-    required this.user,
-  });
+  const DriverProfileScreen({super.key, required this.user});
 
   @override
   State<DriverProfileScreen> createState() => _DriverProfileScreenState();
@@ -28,7 +25,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   static const Color textGrey = Color(0xFF547080);
   static const Color lightBlue = Color(0xFFEAF3FC);
   static const Color lightGreen = Color(0xFFE8F8F1);
-  static const Color lightRed = Color(0xFFFFECEC);
   static const Color lightOrange = Color(0xFFFFF1E6);
 
   final VehicleRepository _vehicleRepository = VehicleRepository();
@@ -38,10 +34,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   late String _phone;
   late String _university;
   Vehicle? _vehicle;
-  DriverPreferences _preferences = DriverPreferences.defaults();
   DriverProfileStats? _stats;
   bool _isLoading = true;
-  bool _isSavingPreference = false;
 
   @override
   void initState() {
@@ -62,14 +56,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     try {
       final values = await Future.wait<Object?>([
         _vehicleRepository.getVehicleForUser(userId),
-        _profileRepository.getPreferences(userId),
         _profileRepository.getStats(userId),
       ]);
       if (!mounted) return;
       setState(() {
         _vehicle = values[0] as Vehicle?;
-        _preferences = values[1] as DriverPreferences;
-        _stats = values[2] as DriverProfileStats;
+        _stats = values[1] as DriverProfileStats;
         _isLoading = false;
       });
     } catch (_) {
@@ -91,21 +83,20 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(context),
-              const SizedBox(height: 27),
+              const SizedBox(height: 15),
               _buildIdentity(),
-              const SizedBox(height: 25),
+              const SizedBox(height: 20),
+              _sectionHeading('Mon activité'),
               _buildStatistics(),
-              const SizedBox(height: 26),
+              const SizedBox(height: 20),
               _buildPersonalInformation(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
               _buildVehicleSection(),
-              const SizedBox(height: 20),
-              _buildPreferencesSection(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
               _buildDriverModeCard(),
-              const SizedBox(height: 18),
+              const SizedBox(height: 15),
               _buildAccountActions(),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               _buildSecurityFooter(),
             ],
           ),
@@ -115,31 +106,31 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Widget _buildHeader(BuildContext context) => Row(
-        children: [
-          _headerButton(
-            icon: Icons.arrow_back_rounded,
-            onTap: () => Navigator.of(context).maybePop(),
-          ),
-          const Spacer(),
-          const Text(
-            'Mon profil',
-            style: TextStyle(
-              color: primaryBlue,
-              fontSize: 21,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const Spacer(),
-          _headerButton(
-            icon: Icons.settings_outlined,
-            onTap: () => _showInfoDialog(
-              title: 'Paramètres',
-              message: 'Les paramètres généraux seront disponibles ici.',
-              icon: Icons.settings_outlined,
-            ),
-          ),
-        ],
-      );
+    children: [
+      _headerButton(
+        icon: Icons.arrow_back_rounded,
+        onTap: () => Navigator.of(context).maybePop(),
+      ),
+      const Spacer(),
+      const Text(
+        'Mon profil',
+        style: TextStyle(
+          color: primaryBlue,
+          fontSize: 21,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      const Spacer(),
+      _headerButton(
+        icon: Icons.settings_outlined,
+        onTap: () => _showInfoDialog(
+          title: 'Paramètres',
+          message: 'Les paramètres généraux seront disponibles ici.',
+          icon: Icons.settings_outlined,
+        ),
+      ),
+    ],
+  );
 
   Widget _headerButton({required IconData icon, required VoidCallback onTap}) {
     return Material(
@@ -160,7 +151,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   Widget _buildIdentity() {
     final imagePath = widget.user.profileImage?.trim();
     final imageUri = imagePath == null ? null : Uri.tryParse(imagePath);
-    final isNetworkImage = imageUri != null &&
+    final isNetworkImage =
+        imageUri != null &&
         (imageUri.scheme == 'http' || imageUri.scheme == 'https');
     final isAssetImage = imagePath?.startsWith('assets/') == true;
     Widget avatar = _avatarFallback();
@@ -178,99 +170,116 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       );
     }
 
-    return Center(
-      child: Column(
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 116,
-                height: 116,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryBlue.withValues(alpha: 0.1),
-                      blurRadius: 24,
-                      offset: const Offset(0, 9),
-                    ),
-                  ],
-                ),
-                child: ClipOval(child: avatar),
-              ),
-              Positioned(
-                right: -1,
-                bottom: 1,
-                child: Material(
-                  color: secondaryBlue,
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => _showInfoDialog(
-                      title: 'Photo de profil',
-                      message:
-                          'Vous pourrez bientôt choisir une photo depuis '
-                          'la galerie ou prendre une nouvelle photo.',
-                      icon: Icons.camera_alt_outlined,
-                    ),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: secondaryBlue,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: background, width: 4),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+      decoration: _cardDecoration(radius: 22),
+      child: Center(
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 88,
+                  height: 88,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryBlue.withValues(alpha: 0.1),
+                        blurRadius: 24,
+                        offset: const Offset(0, 9),
                       ),
-                      child: const Icon(
-                        Icons.camera_alt_outlined,
-                        color: Colors.white,
-                        size: 17,
+                    ],
+                  ),
+                  child: ClipOval(child: avatar),
+                ),
+                Positioned(
+                  right: -1,
+                  bottom: 1,
+                  child: Material(
+                    color: secondaryBlue,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => _showInfoDialog(
+                        title: 'Photo de profil',
+                        message:
+                            'Vous pourrez bientôt choisir une photo depuis '
+                            'la galerie ou prendre une nouvelle photo.',
+                        icon: Icons.camera_alt_outlined,
+                      ),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: secondaryBlue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: background, width: 4),
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt_outlined,
+                          color: Colors.white,
+                          size: 14,
+                        ),
                       ),
                     ),
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _fullName,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: primaryBlue,
+                fontSize: 21,
+                fontWeight: FontWeight.w800,
               ),
-            ],
-          ),
-          const SizedBox(height: 15),
-          Text(
-            _fullName,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: primaryBlue,
-              fontSize: 25,
-              fontWeight: FontWeight.w800,
             ),
-          ),
-          const SizedBox(height: 8),
-          _verificationBadge(),
-          const SizedBox(height: 7),
-          Text(
-            widget.user.email,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: textGrey.withValues(alpha: 0.75),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+            const SizedBox(height: 7),
+            _verificationBadge(),
+            const SizedBox(height: 6),
+            Text(
+              widget.user.email,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: textGrey.withValues(alpha: 0.75),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
+  Widget _sectionHeading(String title) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Text(
+      title,
+      style: const TextStyle(
+        color: primaryBlue,
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+
   Widget _avatarFallback() => Container(
-        color: lightBlue,
-        alignment: Alignment.center,
-        child: const Icon(Icons.person_rounded, color: secondaryBlue, size: 58),
-      );
+    color: lightBlue,
+    alignment: Alignment.center,
+    child: const Icon(Icons.person_rounded, color: secondaryBlue, size: 58),
+  );
 
   Widget _verificationBadge() {
     final verified = widget.user.isVerified;
@@ -350,21 +359,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     required String subtitle,
   }) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 140),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 14),
-      decoration: _cardDecoration(radius: 19),
+      constraints: const BoxConstraints(minHeight: 120),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+      decoration: _cardDecoration(radius: 17),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 27),
-          const SizedBox(height: 7),
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 5),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               value,
               style: const TextStyle(
                 color: primaryBlue,
-                fontSize: 21,
+                fontSize: 19,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -375,7 +384,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: textGrey,
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -387,7 +396,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: textGrey.withValues(alpha: 0.62),
-              fontSize: 9,
+              fontSize: 8.5,
             ),
           ),
         ],
@@ -535,6 +544,49 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             ),
           )
         else ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 11),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: lightBlue,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: const Icon(
+                    Icons.directions_car_filled_rounded,
+                    color: secondaryBlue,
+                    size: 23,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${vehicle.brand} ${vehicle.model}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: primaryBlue,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${vehicle.seats} places',
+                        style: const TextStyle(color: textGrey, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           _informationRow(
             icon: Icons.directions_car_outlined,
             label: 'Marque',
@@ -706,134 +758,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     setState(() => _vehicle = vehicle);
   }
 
-  Widget _buildPreferencesSection() {
-    return _sectionCard(
-      title: 'Préférences conducteur',
-      icon: Icons.tune_rounded,
-      children: [
-        _preferenceSwitch(
-          icon: Icons.smoking_rooms_outlined,
-          title: 'Fumeur accepté',
-          value: _preferences.smokingAllowed,
-          onChanged: (value) => _savePreference(
-            DriverPreferences(
-              smokingAllowed: value,
-              petsAllowed: _preferences.petsAllowed,
-              musicAllowed: _preferences.musicAllowed,
-              conversation: _preferences.conversation,
-            ),
-          ),
-        ),
-        _divider(),
-        _preferenceSwitch(
-          icon: Icons.music_note_rounded,
-          title: 'Musique',
-          value: _preferences.musicAllowed,
-          onChanged: (value) => _savePreference(
-            DriverPreferences(
-              smokingAllowed: _preferences.smokingAllowed,
-              petsAllowed: _preferences.petsAllowed,
-              musicAllowed: value,
-              conversation: _preferences.conversation,
-            ),
-          ),
-        ),
-        _divider(),
-        _preferenceSwitch(
-          icon: Icons.pets_rounded,
-          title: 'Animaux',
-          value: _preferences.petsAllowed,
-          onChanged: (value) => _savePreference(
-            DriverPreferences(
-              smokingAllowed: _preferences.smokingAllowed,
-              petsAllowed: value,
-              musicAllowed: _preferences.musicAllowed,
-              conversation: _preferences.conversation,
-            ),
-          ),
-        ),
-        _divider(),
-        _informationRow(
-          icon: Icons.chat_bubble_outline_rounded,
-          label: 'Conversation',
-          value: _preferences.conversation,
-          onTap: _toggleConversation,
-          trailing: const Icon(Icons.chevron_right_rounded, color: textGrey, size: 20),
-        ),
-      ],
-    );
-  }
-
-  Widget _preferenceSwitch({
-    required IconData icon,
-    required String title,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      child: Row(
-        children: [
-          Icon(icon, color: secondaryBlue, size: 19),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: textGrey,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Switch.adaptive(
-            value: value,
-            activeTrackColor: green,
-            onChanged: _isSavingPreference ? null : onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _savePreference(DriverPreferences next) async {
-    final userId = widget.user.id;
-    if (userId == null) return;
-    final previous = _preferences;
-    setState(() {
-      _preferences = next;
-      _isSavingPreference = true;
-    });
-    try {
-      await _profileRepository.savePreferences(userId, next);
-      if (!mounted) return;
-      setState(() => _isSavingPreference = false);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _preferences = previous;
-        _isSavingPreference = false;
-      });
-      _showMessage('Impossible d’enregistrer les préférences.');
-    }
-  }
-
-  Future<void> _toggleConversation() async {
-    final next = _preferences.conversation == 'Modérée' ? 'Limitée' : 'Modérée';
-    await _savePreference(
-      DriverPreferences(
-        smokingAllowed: _preferences.smokingAllowed,
-        petsAllowed: _preferences.petsAllowed,
-        musicAllowed: _preferences.musicAllowed,
-        conversation: next,
-      ),
-    );
-  }
-
   Widget _buildDriverModeCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(17),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: lightGreen,
         borderRadius: BorderRadius.circular(20),
@@ -845,8 +773,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.8),
                   shape: BoxShape.circle,
@@ -876,7 +804,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 11),
           _primaryButton(
             icon: Icons.swap_horiz_rounded,
             label: 'Revenir en mode passager',
@@ -956,8 +884,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   Widget _buildAccountActions() {
     return _sectionCard(
-      title: 'Compte',
-      icon: Icons.manage_accounts_rounded,
+      title: 'Déconnexion',
+      icon: Icons.logout_rounded,
       children: [
         _accountAction(
           icon: Icons.logout_rounded,
@@ -967,41 +895,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           tileColor: lightOrange,
           onTap: _confirmLogout,
         ),
-        _divider(),
-        _accountAction(
-          icon: Icons.delete_outline_rounded,
-          title: 'Supprimer mon compte',
-          subtitle: 'Cette action est définitive.',
-          color: const Color(0xFFE53935),
-          tileColor: lightRed,
-          onTap: _confirmDeleteAccount,
-        ),
       ],
     );
   }
 
   Future<void> _confirmLogout() async {
     await LogoutFlow.confirmAndLogout(context);
-  }
-
-  Future<void> _confirmDeleteAccount() async {
-    final confirmed = await _showConfirmationDialog(
-      title: 'Supprimer votre compte ?',
-      message:
-          'Cette action est définitive. Les informations associées à votre '
-          'compte pourront être supprimées.',
-      icon: Icons.delete_outline_rounded,
-      iconColor: const Color(0xFFE53935),
-      cancelText: 'Annuler',
-      confirmText: 'Supprimer',
-    );
-    if (!mounted || confirmed != true) return;
-    _showInfoDialog(
-      title: 'Suppression du compte',
-      message:
-          'La suppression réelle du compte n’est pas encore connectée à SQLite.',
-      icon: Icons.info_outline_rounded,
-    );
   }
 
   Widget _accountAction({
@@ -1023,7 +922,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: tileColor, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: tileColor,
+                  shape: BoxShape.circle,
+                ),
                 child: Icon(icon, color: color, size: 22),
               ),
               const SizedBox(width: 12),
@@ -1059,26 +961,26 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Widget _buildSecurityFooter() => Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.verified_user_outlined,
-              color: textGrey.withValues(alpha: 0.5),
-              size: 15,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Vos données restent protégées',
-              style: TextStyle(
-                color: textGrey.withValues(alpha: 0.55),
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.verified_user_outlined,
+          color: textGrey.withValues(alpha: 0.5),
+          size: 15,
         ),
-      );
+        const SizedBox(width: 6),
+        Text(
+          'Vos données restent protégées',
+          style: TextStyle(
+            color: textGrey.withValues(alpha: 0.55),
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _sectionCard({
     required String title,
@@ -1093,12 +995,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 15, 12, 13),
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 11),
             child: Row(
               children: [
                 Container(
-                  width: 39,
-                  height: 39,
+                  width: 35,
+                  height: 35,
                   decoration: BoxDecoration(
                     color: lightBlue,
                     borderRadius: BorderRadius.circular(12),
@@ -1148,13 +1050,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     Widget? trailing,
   }) {
     final row = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
-            decoration: const BoxDecoration(color: lightBlue, shape: BoxShape.circle),
+            width: 32,
+            height: 32,
+            decoration: const BoxDecoration(
+              color: lightBlue,
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, color: secondaryBlue, size: 18),
           ),
           const SizedBox(width: 11),
@@ -1187,12 +1092,13 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     ),
                   ),
                 ),
-                if (trailing != null) ...[
-                  const SizedBox(width: 6),
-                  trailing,
-                ],
+                if (trailing != null) ...[const SizedBox(width: 6), trailing],
                 if (onTap != null)
-                  const Icon(Icons.chevron_right_rounded, color: textGrey, size: 19),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: textGrey,
+                    size: 19,
+                  ),
               ],
             ),
           ),
@@ -1207,9 +1113,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Widget _divider() => const Padding(
-        padding: EdgeInsets.only(left: 62),
-        child: Divider(height: 1, color: Color(0xFFE5ECE9)),
-      );
+    padding: EdgeInsets.only(left: 62),
+    child: Divider(height: 1, color: Color(0xFFE5ECE9)),
+  );
 
   Widget _primaryButton({
     required IconData icon,
@@ -1231,24 +1137,26 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );
   }
 
   BoxDecoration _cardDecoration({required double radius}) => BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: const Color(0xFFE1ECE8)),
-        boxShadow: [
-          BoxShadow(
-            color: primaryBlue.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      );
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: const Color(0xFFE1ECE8)),
+    boxShadow: [
+      BoxShadow(
+        color: primaryBlue.withValues(alpha: 0.04),
+        blurRadius: 16,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  );
 
   Future<bool?> _showConfirmationDialog({
     required String title,
@@ -1463,11 +1371,18 @@ class _PersonalInfoDialogState extends State<_PersonalInfoDialog> {
         icon: Icons.person_outline_rounded,
         formKey: _formKey,
         fields: [
-          _field('Nom complet', _nameController, validator: (value) =>
-              value == null || value.trim().isEmpty
-                  ? 'Le nom complet est obligatoire.'
-                  : null),
-          _field('Téléphone', _phoneController, keyboardType: TextInputType.phone),
+          _field(
+            'Nom complet',
+            _nameController,
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Le nom complet est obligatoire.'
+                : null,
+          ),
+          _field(
+            'Téléphone',
+            _phoneController,
+            keyboardType: TextInputType.phone,
+          ),
           _field('Université', _universityController),
         ],
         onCancel: () => Navigator.of(context).pop(),
@@ -1513,7 +1428,13 @@ class _VehicleDialog extends StatefulWidget {
 
 class _VehicleDialogState extends State<_VehicleDialog> {
   static const _colors = [
-    'Blanc', 'Noir', 'Gris', 'Bleu', 'Rouge', 'Vert', 'Autre',
+    'Blanc',
+    'Noir',
+    'Gris',
+    'Bleu',
+    'Rouge',
+    'Vert',
+    'Autre',
   ];
 
   final _formKey = GlobalKey<FormState>();
@@ -1528,8 +1449,9 @@ class _VehicleDialogState extends State<_VehicleDialog> {
     super.initState();
     _brandController = TextEditingController(text: widget.vehicle?.brand ?? '');
     _modelController = TextEditingController(text: widget.vehicle?.model ?? '');
-    _plateController =
-        TextEditingController(text: widget.vehicle?.licensePlate ?? '');
+    _plateController = TextEditingController(
+      text: widget.vehicle?.licensePlate ?? '',
+    );
     _seats = widget.vehicle?.seats ?? 2;
     final initialColor = widget.vehicle?.color;
     _color = _colors.contains(initialColor) ? initialColor : null;
@@ -1547,52 +1469,54 @@ class _VehicleDialogState extends State<_VehicleDialog> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       child: _ProfileEditDialogFrame(
-          title: widget.vehicle == null ? 'Ajouter un véhicule' : 'Modifier le véhicule',
-          icon: Icons.directions_car_rounded,
-          formKey: _formKey,
-          fields: [
-            _field('Marque', _brandController, validator: _required),
-            _field('Modèle', _modelController, validator: _required),
-            DropdownButtonFormField<String>(
-              initialValue: _color,
-              decoration: _inputDecoration('Couleur', Icons.palette_outlined),
-              items: _colors
-                  .map((color) => DropdownMenuItem(
-                        value: color,
-                        child: Text(color),
-                      ))
-                  .toList(),
-              onChanged: (value) => setState(() => _color = value),
+        title: widget.vehicle == null
+            ? 'Ajouter un véhicule'
+            : 'Modifier le véhicule',
+        icon: Icons.directions_car_rounded,
+        formKey: _formKey,
+        fields: [
+          _field('Marque', _brandController, validator: _required),
+          _field('Modèle', _modelController, validator: _required),
+          DropdownButtonFormField<String>(
+            initialValue: _color,
+            decoration: _inputDecoration('Couleur', Icons.palette_outlined),
+            items: _colors
+                .map(
+                  (color) => DropdownMenuItem(value: color, child: Text(color)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => _color = value),
+          ),
+          _field(
+            'Immatriculation',
+            _plateController,
+            textCapitalization: TextCapitalization.characters,
+            validator: _required,
+          ),
+          _seatPicker(),
+        ],
+        onCancel: () => Navigator.of(context).pop(),
+        onSave: () {
+          if (!_formKey.currentState!.validate() || _seats < 2 || _seats > 8) {
+            return;
+          }
+          Navigator.of(context).pop(
+            _VehicleFormResult(
+              brand: _brandController.text.trim(),
+              model: _modelController.text.trim(),
+              color: _color,
+              licensePlate: _plateController.text.trim().toUpperCase(),
+              seats: _seats,
             ),
-            _field(
-              'Immatriculation',
-              _plateController,
-              textCapitalization: TextCapitalization.characters,
-              validator: _required,
-            ),
-            _seatPicker(),
-          ],
-          onCancel: () => Navigator.of(context).pop(),
-          onSave: () {
-            if (!_formKey.currentState!.validate() || _seats < 2 || _seats > 8) {
-              return;
-            }
-            Navigator.of(context).pop(
-              _VehicleFormResult(
-                brand: _brandController.text.trim(),
-                model: _modelController.text.trim(),
-                color: _color,
-                licensePlate: _plateController.text.trim().toUpperCase(),
-                seats: _seats,
-              ),
-            );
-          },
+          );
+        },
       ),
     );
   }
 
-  String? _required(String? value) =>
-      value == null || value.trim().isEmpty ? 'Ce champ est obligatoire.' : null;
+  String? _required(String? value) => value == null || value.trim().isEmpty
+      ? 'Ce champ est obligatoire.'
+      : null;
 
   Widget _seatPicker() {
     return Row(
@@ -1693,10 +1617,12 @@ class _ProfileEditDialogFrame extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 17),
-              ...fields.map((field) => Padding(
-                    padding: const EdgeInsets.only(bottom: 11),
-                    child: field,
-                  )),
+              ...fields.map(
+                (field) => Padding(
+                  padding: const EdgeInsets.only(bottom: 11),
+                  child: field,
+                ),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -1761,7 +1687,8 @@ Widget _field(
   );
 }
 
-InputDecoration _inputDecoration(String label, IconData icon) => InputDecoration(
+InputDecoration _inputDecoration(String label, IconData icon) =>
+    InputDecoration(
       labelText: label,
       prefixIcon: Icon(
         icon,
