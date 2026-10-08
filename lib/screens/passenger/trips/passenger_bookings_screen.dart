@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/booking.dart';
 import '../../../models/user.dart';
 import '../../../repositories/booking_repository.dart';
+import '../../../widgets/passenger/passenger_header.dart';
 import 'passenger_booking_details_screen.dart';
 
 enum _BookingFilter { upcoming, past, cancelled }
@@ -81,10 +82,16 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(19, 18, 19, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      PassengerHeader(
+                        user: widget.user,
+                        compact: true,
+                        showHeroBackground: false,
+                      ),
+                      const SizedBox(height: 22),
                       const Text(
                         'Mes réservations',
                         style: TextStyle(color: primaryBlue, fontSize: 24, fontWeight: FontWeight.w800),
