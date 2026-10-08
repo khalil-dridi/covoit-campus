@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../models/user.dart';
 import '../../../models/user_profile_context.dart';
 import '../../../repositories/message_repository.dart';
+import '../../../widgets/driver/driver_header.dart';
 import '../../../widgets/passenger/passenger_header.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 import 'chat_screen.dart';
@@ -176,50 +177,25 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildHeader() {
-    if (!_isDriver) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isDriver)
+            DriverHeader(user: widget.currentUser, compact: true)
+          else
             PassengerHeader(
               user: widget.currentUser,
               compact: true,
               showHeroBackground: false,
             ),
-            const SizedBox(height: 22),
-            const Text(
-              'Messages',
-              style: TextStyle(
-                color: _primaryBlue,
-                fontSize: 21,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              'Vos conversations avec vos conducteurs.',
-              style: TextStyle(
-                color: _textGrey.withValues(alpha: 0.82),
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 17),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 18, 19, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          const SizedBox(height: 22),
           const Text(
             'Messages',
             style: TextStyle(
               color: _primaryBlue,
-              fontSize: 24,
+              fontSize: 21,
               fontWeight: FontWeight.w800,
             ),
           ),

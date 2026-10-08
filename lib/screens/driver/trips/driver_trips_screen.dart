@@ -125,6 +125,7 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
                     children: [
                       DriverHeader(
                         user: widget.user,
+                        compact: true,
                       ),
                       const SizedBox(height: 20),
                       const Text(

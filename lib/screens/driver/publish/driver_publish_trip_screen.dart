@@ -133,6 +133,7 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
               children: [
                 DriverHeader(
                   user: widget.user,
+                  compact: true,
                 ),
                 const SizedBox(height: 20),
                 const Text(

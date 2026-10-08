@@ -10,11 +10,13 @@ import '../shared/notification_bell.dart';
 class DriverHeader extends StatelessWidget {
   final User user;
   final VoidCallback? onNotificationTap;
+  final bool compact;
 
   const DriverHeader({
     super.key,
     required this.user,
     this.onNotificationTap,
+    this.compact = false,
   });
 
   static const Color primaryBlue = Color(0xFF123D68);
@@ -27,6 +29,18 @@ class DriverHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Row(
+        children: [
+          Expanded(child: _buildBrand()),
+          const SizedBox(width: 9),
+          _notificationButton(),
+          const SizedBox(width: 9),
+          _avatar(context),
+        ],
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: SizedBox(
