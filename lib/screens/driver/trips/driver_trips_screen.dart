@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../models/trip.dart';
 import '../../../models/user.dart';
@@ -10,6 +11,7 @@ import '../../../repositories/trip_repository.dart';
 import '../../../repositories/vehicle_repository.dart';
 import '../../../widgets/driver/driver_header.dart';
 import 'driver_trip_details_screen.dart';
+import '../publish/location_picker_screen.dart';
 
 enum DriverTripsFilter { upcoming, past, cancelled }
 
@@ -736,6 +738,8 @@ class _EditTripSheetState extends State<_EditTripSheet> {
   final _priceController = TextEditingController();
   final _seatsController = TextEditingController();
   final _descriptionController = TextEditingController();
+  LatLng? _departurePoint;
+  LatLng? _arrivalPoint;
   DateTime? _date;
   TimeOfDay? _time;
   Vehicle? _selectedVehicle;
@@ -750,6 +754,12 @@ class _EditTripSheetState extends State<_EditTripSheet> {
     _priceController.text = widget.trip.price.toStringAsFixed(0);
     _seatsController.text = widget.trip.totalSeats.toString();
     _descriptionController.text = widget.trip.description ?? '';
+    if (widget.trip.departureLatitude != null && widget.trip.departureLongitude != null) {
+      _departurePoint = LatLng(widget.trip.departureLatitude!, widget.trip.departureLongitude!);
+    }
+    if (widget.trip.arrivalLatitude != null && widget.trip.arrivalLongitude != null) {
+      _arrivalPoint = LatLng(widget.trip.arrivalLatitude!, widget.trip.arrivalLongitude!);
+    }
     _date = DateTime.parse(widget.trip.departureDate);
     _time = TimeOfDay(hour: int.parse(widget.trip.departureTime.split(':')[0]), minute: int.parse(widget.trip.departureTime.split(':')[1]));
     _selectedVehicle = widget.vehicles.firstWhere(
@@ -812,9 +822,9 @@ class _EditTripSheetState extends State<_EditTripSheet> {
                         style: TextStyle(color: textGrey, fontSize: 12.5, height: 1.4),
                       ),
                       const SizedBox(height: 18),
-                      _field('Ville de départ', _departureController, Icons.trip_origin_rounded, true),
+                      _editLocationField('Ville de départ', _departureController, Icons.trip_origin_rounded, true),
                       const SizedBox(height: 12),
-                      _field('Ville d’arrivée', _destinationController, Icons.location_on_rounded, true),
+                      _editLocationField('Ville d’arrivée', _destinationController, Icons.location_on_rounded, false),
                       const SizedBox(height: 12),
                       _dateTimeRow(),
                       const SizedBox(height: 12),
@@ -867,6 +877,49 @@ class _EditTripSheetState extends State<_EditTripSheet> {
         style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         decoration: _inputDecoration(label, icon),
       );
+
+  Widget _editLocationField(String label, TextEditingController controller, IconData icon, bool isDeparture) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            controller: controller,
+            readOnly: true,
+            validator: (value) => value == null || value.trim().isEmpty ? 'Ce champ est obligatoire.' : null,
+            style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
+            decoration: _inputDecoration(label, icon),
+            onTap: () => _pickEditLocation(isDeparture),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _pickEditLocation(isDeparture),
+              icon: const Icon(Icons.map_outlined, size: 17),
+              label: const Text('Modifier sur la carte'),
+            ),
+          ),
+        ],
+      );
+
+  Future<void> _pickEditLocation(bool isDeparture) async {
+    final selection = await Navigator.of(context).push<LocationSelection>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          title: isDeparture ? 'Ville de départ' : 'Ville d’arrivée',
+          initialPoint: isDeparture ? _departurePoint : _arrivalPoint,
+        ),
+      ),
+    );
+    if (!mounted || selection == null) return;
+    setState(() {
+      if (isDeparture) {
+        _departurePoint = selection.point;
+        _departureController.text = selection.label;
+      } else {
+        _arrivalPoint = selection.point;
+        _destinationController.text = selection.label;
+      }
+    });
+  }
 
   Widget _numericField(String label, TextEditingController controller, IconData icon) => TextFormField(
         controller: controller,
@@ -1017,6 +1070,10 @@ class _EditTripSheetState extends State<_EditTripSheet> {
         driverId: widget.user.id!,
         departure: _departureController.text.trim(),
         destination: _destinationController.text.trim(),
+        departureLatitude: _departurePoint?.latitude,
+        departureLongitude: _departurePoint?.longitude,
+        arrivalLatitude: _arrivalPoint?.latitude,
+        arrivalLongitude: _arrivalPoint?.longitude,
         departureDate: DateFormat('yyyy-MM-dd').format(_date!),
         departureTime: '${_time!.hour.toString().padLeft(2, '0')}:${_time!.minute.toString().padLeft(2, '0')}',
         totalSeats: seats,

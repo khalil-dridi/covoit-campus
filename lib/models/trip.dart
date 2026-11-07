@@ -4,6 +4,10 @@ class Trip {
   final int vehicleId;
   final String departure;
   final String destination;
+  final double? departureLatitude;
+  final double? departureLongitude;
+  final double? arrivalLatitude;
+  final double? arrivalLongitude;
   final String departureDate;
   final String departureTime;
   final int totalSeats;
@@ -26,6 +30,10 @@ class Trip {
     required this.vehicleId,
     required this.departure,
     required this.destination,
+    this.departureLatitude,
+    this.departureLongitude,
+    this.arrivalLatitude,
+    this.arrivalLongitude,
     required this.departureDate,
     required this.departureTime,
     required this.totalSeats,
@@ -52,6 +60,10 @@ class Trip {
       vehicleId: map['vehicle_id'] as int,
       departure: map['departure'] as String,
       destination: map['destination'] as String,
+      departureLatitude: (map['departure_latitude'] as num?)?.toDouble(),
+      departureLongitude: (map['departure_longitude'] as num?)?.toDouble(),
+      arrivalLatitude: (map['arrival_latitude'] as num?)?.toDouble(),
+      arrivalLongitude: (map['arrival_longitude'] as num?)?.toDouble(),
       departureDate: map['departure_date'] as String,
       departureTime: map['departure_time'] as String,
       totalSeats: map['total_seats'] as int,
@@ -71,19 +83,23 @@ class Trip {
   }
 
   Map<String, Object?> toMap() => {
-        'driver_id': driverId,
-        'vehicle_id': vehicleId,
-        'departure': departure,
-        'destination': destination,
-        'departure_date': departureDate,
-        'departure_time': departureTime,
-        'total_seats': totalSeats,
-        'available_seats': availableSeats,
-        'price': price,
-        'meeting_point': meetingPoint,
-        'description': description,
-        'status': status,
-        'created_at': createdAt,
-        'updated_at': updatedAt,
-      };
+    'driver_id': driverId,
+    'vehicle_id': vehicleId,
+    'departure': departure,
+    'destination': destination,
+    'departure_latitude': departureLatitude,
+    'departure_longitude': departureLongitude,
+    'arrival_latitude': arrivalLatitude,
+    'arrival_longitude': arrivalLongitude,
+    'departure_date': departureDate,
+    'departure_time': departureTime,
+    'total_seats': totalSeats,
+    'available_seats': availableSeats,
+    'price': price,
+    'meeting_point': meetingPoint,
+    'description': description,
+    'status': status,
+    'created_at': createdAt,
+    'updated_at': updatedAt,
+  };
 }

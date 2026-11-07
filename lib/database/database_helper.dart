@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
 
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -113,6 +113,10 @@ class DatabaseHelper {
         vehicle_id INTEGER NOT NULL,
         departure TEXT NOT NULL,
         destination TEXT NOT NULL,
+        departure_latitude REAL,
+        departure_longitude REAL,
+        arrival_latitude REAL,
+        arrival_longitude REAL,
         departure_date TEXT NOT NULL,
         departure_time TEXT NOT NULL,
         total_seats INTEGER NOT NULL,
@@ -334,6 +338,21 @@ class DatabaseHelper {
 
     if (oldVersion < 5) {
       await _upgradeMessagesForRideRequests(db);
+    }
+
+    if (oldVersion < 6) {
+      final columns = await db.rawQuery('PRAGMA table_info(trips)');
+      final existing = columns.map((column) => column['name']).toSet();
+      for (final column in const [
+        'departure_latitude',
+        'departure_longitude',
+        'arrival_latitude',
+        'arrival_longitude',
+      ]) {
+        if (!existing.contains(column)) {
+          await db.execute('ALTER TABLE trips ADD COLUMN $column REAL');
+        }
+      }
     }
   }
 

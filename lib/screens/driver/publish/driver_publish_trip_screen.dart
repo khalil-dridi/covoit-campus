@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../models/trip.dart';
 import '../../../models/user.dart';
@@ -6,6 +7,7 @@ import '../../../models/vehicle.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../../repositories/vehicle_repository.dart';
 import '../../../widgets/driver/driver_header.dart';
+import 'location_picker_screen.dart';
 
 class DriverPublishTripScreen extends StatefulWidget {
   final User user;
@@ -32,20 +34,6 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
   static const Color lightBlue = Color(0xFFEAF3FC);
   static const Color lightGreen = Color(0xFFE8F8F1);
 
-  static const List<String> _cities = [
-    'Tunis',
-    'Ariana',
-    'Manouba',
-    'Ben Arous',
-    'La Marsa',
-    'Nabeul',
-    'Sousse',
-    'Monastir',
-    'Bizerte',
-    'Béja',
-    'Medjez El Bab',
-  ];
-
   final _descriptionController = TextEditingController();
   final _meetingPointController = TextEditingController();
   final _priceController = TextEditingController();
@@ -58,6 +46,8 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
   Vehicle? _selectedVehicle;
   String? _departure;
   String? _destination;
+  LatLng? _departurePoint;
+  LatLng? _arrivalPoint;
   DateTime? _date;
   TimeOfDay? _time;
   int _availableSeats = 1;
@@ -345,7 +335,10 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
   void _validateCurrentStepAndContinue() {
     FocusScope.of(context).unfocus();
     if (_currentStep == 0) {
-      if (_departure == null || _destination == null) {
+      if (_departure == null ||
+          _departurePoint == null ||
+          _destination == null ||
+          _arrivalPoint == null) {
         setState(
           () => _formError = _departure == null
               ? 'Veuillez choisir une ville de départ.'
@@ -735,17 +728,16 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
   );
 
   Future<void> _selectCity({required bool isDeparture}) async {
-    final chosen = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _CityPickerSheet(
-        cities: _cities,
-        title: isDeparture ? 'Ville de départ' : 'Ville d’arrivée',
-        selected: isDeparture ? _departure : _destination,
+    final selection = await Navigator.of(context).push<LocationSelection>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          title: isDeparture ? 'Ville de départ' : 'Ville d’arrivée',
+          initialPoint: isDeparture ? _departurePoint : _arrivalPoint,
+        ),
       ),
     );
-    if (!mounted || chosen == null) return;
+    if (!mounted || selection == null) return;
+    final chosen = selection.label;
     if ((isDeparture && chosen == _destination) ||
         (!isDeparture && chosen == _departure)) {
       setState(
@@ -757,8 +749,10 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
     setState(() {
       if (isDeparture) {
         _departure = chosen;
+        _departurePoint = selection.point;
       } else {
         _destination = chosen;
+        _arrivalPoint = selection.point;
       }
       _formError = null;
     });
@@ -767,8 +761,11 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
   void _swapCities() {
     setState(() {
       final previous = _departure;
+      final previousPoint = _departurePoint;
       _departure = _destination;
       _destination = previous;
+      _departurePoint = _arrivalPoint;
+      _arrivalPoint = previousPoint;
       _formError = null;
     });
   }
@@ -901,6 +898,10 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
           vehicleId: _selectedVehicle!.id!,
           departure: _departure!,
           destination: _destination!,
+          departureLatitude: _departurePoint!.latitude,
+          departureLongitude: _departurePoint!.longitude,
+          arrivalLatitude: _arrivalPoint!.latitude,
+          arrivalLongitude: _arrivalPoint!.longitude,
           departureDate: _formatIsoDate(_date!),
           departureTime: _formatTime(_time!),
           totalSeats: seats,
@@ -946,6 +947,8 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
       _currentStep = 0;
       _departure = null;
       _destination = null;
+      _departurePoint = null;
+      _arrivalPoint = null;
       _date = null;
       _time = null;
       _availableSeats = 1;
@@ -1267,83 +1270,6 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
       ),
     );
   }
-}
-
-class _CityPickerSheet extends StatelessWidget {
-  final List<String> cities;
-  final String title;
-  final String? selected;
-
-  const _CityPickerSheet({
-    required this.cities,
-    required this.title,
-    required this.selected,
-  });
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 13, 20, 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 38,
-            height: 4,
-            decoration: BoxDecoration(
-              color: const Color(0xFFD8E4DF),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Color(0xFF123D68),
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(height: 9),
-          Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: cities.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final city = cities[index];
-                final isSelected = city == selected;
-                return ListTile(
-                  leading: const Icon(
-                    Icons.location_on_outlined,
-                    color: Color(0xFF1E5AA8),
-                  ),
-                  title: Text(city),
-                  trailing: isSelected
-                      ? const Icon(
-                          Icons.check_circle_rounded,
-                          color: Color(0xFF20B978),
-                        )
-                      : null,
-                  onTap: () => Navigator.of(context).pop(city),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _CustomDialog extends StatelessWidget {
