@@ -348,7 +348,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.covoit_campus',
+                userAgentPackageName: 'com.khalildridi.covoitcampus',
               ),
               if (_currentLocation != null)
                 MarkerLayer(

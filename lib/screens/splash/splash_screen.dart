@@ -1,5 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../../auth/auth_coordinator.dart';
+import '../../auth/auth_navigation.dart';
+import '../../models/user.dart';
 import '../welcome/welcome_screen.dart';
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -15,6 +22,9 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _logoOpacity;
   late Animation<Offset> _textPosition;
   late Animation<double> _textOpacity;
+  late final Timer _startupTimer;
+  final AuthCoordinator _authCoordinator = AuthCoordinator();
+  bool _startupResolved = false;
 
   @override
   void initState() {
@@ -28,70 +38,74 @@ class _SplashScreenState extends State<SplashScreen>
     _logoScale = Tween<double>(
       begin: 0.65,
       end: 1.0,
-    ).animate(
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+
+    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: Curves.easeOutBack,
+        curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
       ),
     );
 
-    _logoOpacity = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(
-          0.0,
-          0.55,
-          curve: Curves.easeOut,
-        ),
-      ),
-    );
+    _textPosition =
+        Tween<Offset>(begin: const Offset(0, 0.35), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0.3, 0.85, curve: Curves.easeOutCubic),
+          ),
+        );
 
-    _textPosition = Tween<Offset>(
-      begin: const Offset(0, 0.35),
-      end: Offset.zero,
-    ).animate(
+    _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(
-          0.3,
-          0.85,
-          curve: Curves.easeOutCubic,
-        ),
-      ),
-    );
-
-    _textOpacity = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(
-          0.3,
-          0.85,
-          curve: Curves.easeOut,
-        ),
+        curve: const Interval(0.3, 0.85, curve: Curves.easeOut),
       ),
     );
 
     _controller.forward();
-    Future.delayed(const Duration(seconds: 3), () {
-  if (!mounted) return;
+    _startupTimer = Timer(const Duration(seconds: 3), _resolveStartup);
+  }
 
-  Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(
-    builder: (context) => const WelcomeScreen(),
-  ),
-);
-});
+  Future<void> _resolveStartup() async {
+    if (_startupResolved || !mounted) return;
+    _startupResolved = true;
+
+    User? restoredUser;
+    try {
+      final identity = _authCoordinator.currentIdentity;
+      if (identity != null) {
+        final resolution = await _authCoordinator.resolveGoogleIdentity(
+          identity,
+        );
+        if (resolution.status == GoogleProfileStatus.authenticated) {
+          restoredUser = resolution.user;
+        } else {
+          await _authCoordinator.signOut();
+        }
+      }
+    } catch (error) {
+      debugPrint('Could not restore Firebase session: $error');
+      try {
+        await _authCoordinator.signOut();
+      } catch (signOutError) {
+        debugPrint('Could not clear invalid Firebase session: $signOutError');
+      }
+    }
+
+    if (!mounted) return;
+    final destination = restoredUser == null
+        ? const WelcomeScreen()
+        : roleShellFor(restoredUser);
+    Navigator.of(context).pushReplacement<void, void>(
+      MaterialPageRoute<void>(
+        builder: (_) => destination ?? const WelcomeScreen(),
+      ),
+    );
   }
 
   @override
   void dispose() {
+    _startupTimer.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -101,7 +115,6 @@ class _SplashScreenState extends State<SplashScreen>
     return Scaffold(
       body: Stack(
         children: [
-
           // ============================================================
           // BACKGROUND
           // ============================================================
@@ -161,7 +174,6 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-
                     // --------------------------------------------------
                     // LOGO
                     // --------------------------------------------------
@@ -205,7 +217,6 @@ class _SplashScreenState extends State<SplashScreen>
                         opacity: _textOpacity,
                         child: Column(
                           children: [
-
                             const Text(
                               'Covoit Campus',
                               textAlign: TextAlign.center,
@@ -239,7 +250,6 @@ class _SplashScreenState extends State<SplashScreen>
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-
                                 _buildMiniChip(
                                   icon: Icons.school_rounded,
                                   text: 'Étudiants',
@@ -279,7 +289,6 @@ class _SplashScreenState extends State<SplashScreen>
             bottom: 42,
             child: Column(
               children: [
-
                 const SizedBox(
                   width: 28,
                   height: 28,
@@ -300,8 +309,7 @@ class _SplashScreenState extends State<SplashScreen>
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
-                    color: const Color(0xFF365B73)
-                        .withValues(alpha: 0.65),
+                    color: const Color(0xFF365B73).withValues(alpha: 0.65),
                   ),
                 ),
               ],
@@ -315,30 +323,18 @@ class _SplashScreenState extends State<SplashScreen>
   // ==============================================================
   // MINI CHIP
   // ==============================================================
-  Widget _buildMiniChip({
-    required IconData icon,
-    required String text,
-  }) {
+  Widget _buildMiniChip({required IconData icon, required String text}) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 11,
-        vertical: 8,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.9),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 14,
-            color: const Color(0xFF20B978),
-          ),
+          Icon(icon, size: 14, color: const Color(0xFF20B978)),
           const SizedBox(width: 5),
           Text(
             text,

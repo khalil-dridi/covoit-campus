@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/firebase_auth_service.dart';
 import '../screens/login/login_screen.dart';
 
 class LogoutFlow {
@@ -23,10 +24,7 @@ class LogoutFlow {
           icon: const Icon(Icons.logout_rounded, color: _logoutColor),
           title: const Text(
             'Se déconnecter ?',
-            style: TextStyle(
-              color: _primaryBlue,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.w800),
           ),
           content: const Text(
             'Voulez-vous vraiment vous déconnecter de votre compte ?',
@@ -50,6 +48,24 @@ class LogoutFlow {
       );
 
       if (!context.mounted || confirmed != true) return;
+
+      try {
+        await FirebaseAuthService().signOut();
+      } catch (error) {
+        debugPrint('Firebase sign-out failed: $error');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'La session distante n’a pas pu être effacée. Réessayez.',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      }
+      if (!context.mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil<void>(
         MaterialPageRoute<void>(builder: (_) => const LoginScreen()),

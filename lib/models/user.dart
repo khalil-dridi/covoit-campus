@@ -3,6 +3,7 @@ class User {
   final String fullName;
   final String email;
   final String passwordHash;
+  final String? firebaseUid;
   final String? phone;
   final String? profileImage;
   final String? university;
@@ -17,6 +18,7 @@ class User {
     required this.fullName,
     required this.email,
     required this.passwordHash,
+    this.firebaseUid,
     this.phone,
     this.profileImage,
     this.university,
@@ -33,6 +35,7 @@ class User {
       'full_name': fullName,
       'email': email,
       'password_hash': passwordHash,
+      'firebase_uid': firebaseUid,
       'phone': phone,
       'profile_image': profileImage,
       'university': university,
@@ -50,6 +53,7 @@ class User {
       fullName: map['full_name'] as String,
       email: map['email'] as String,
       passwordHash: map['password_hash'] as String,
+      firebaseUid: map['firebase_uid'] as String?,
       phone: map['phone'] as String?,
       profileImage: map['profile_image'] as String?,
       university: map['university'] as String?,
@@ -66,6 +70,7 @@ class User {
     String? fullName,
     String? email,
     String? passwordHash,
+    String? firebaseUid,
     String? phone,
     String? profileImage,
     String? university,
@@ -80,6 +85,7 @@ class User {
       fullName: fullName ?? this.fullName,
       email: email ?? this.email,
       passwordHash: passwordHash ?? this.passwordHash,
+      firebaseUid: firebaseUid ?? this.firebaseUid,
       phone: phone ?? this.phone,
       profileImage: profileImage ?? this.profileImage,
       university: university ?? this.university,
@@ -90,4 +96,4 @@ class User {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
-}   
+}

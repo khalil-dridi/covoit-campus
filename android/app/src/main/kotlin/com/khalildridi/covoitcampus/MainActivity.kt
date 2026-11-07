@@ -1,4 +1,4 @@
-package com.example.covoit_campus
+package com.khalildridi.covoitcampus
 
 import io.flutter.embedding.android.FlutterActivity
 

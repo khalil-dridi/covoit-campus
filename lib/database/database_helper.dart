@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
 
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -50,6 +50,7 @@ class DatabaseHelper {
         full_name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
+        firebase_uid TEXT,
         phone TEXT,
         profile_image TEXT,
         university TEXT,
@@ -59,6 +60,10 @@ class DatabaseHelper {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
+    ''');
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid
+      ON users(firebase_uid)
     ''');
 
     // =========================
@@ -354,6 +359,26 @@ class DatabaseHelper {
         }
       }
     }
+
+    if (oldVersion < 7) {
+      await migrateUsersForFirebase(db);
+    }
+  }
+
+  /// Adds Firebase identity support without rebuilding `users`, preserving
+  /// every existing row and all foreign-key relationships.
+  static Future<void> migrateUsersForFirebase(DatabaseExecutor db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(users)');
+    final hasFirebaseUid = columns.any(
+      (column) => column['name'] == 'firebase_uid',
+    );
+    if (!hasFirebaseUid) {
+      await db.execute('ALTER TABLE users ADD COLUMN firebase_uid TEXT');
+    }
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid
+      ON users(firebase_uid)
+    ''');
   }
 
   Future<void> _upgradeMessagesForRideRequests(DatabaseExecutor db) async {
