@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../../widgets/messages/message_badge.dart';
+import '../../widgets/shared/responsive_navigation_bar.dart';
 import '../shared/messages/conversations_screen.dart';
 import 'home/driver_home_screen.dart';
 import 'profile/driver_profile_screen.dart';
@@ -68,7 +69,7 @@ class _DriverShellState extends State<DriverShell> {
         children: _pages,
       ),
 
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: ResponsiveNavigationBar(
         selectedIndex: _currentIndex,
 
         onDestinationSelected: (index) {
@@ -116,5 +117,4 @@ class _DriverShellState extends State<DriverShell> {
       ),
     );
   }
-
-}       
+}

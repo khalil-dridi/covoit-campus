@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
 
 import '../login/login_screen.dart';
-import '../../models/user.dart';
-import '../../repositories/user_repository.dart';
 import '../verification/email_verification_screen.dart';
-import '../../utils/password_hasher.dart';
+import '../../auth/auth_coordinator.dart';
 import '../welcome/welcome_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -50,8 +49,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController =
-      TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController =
       TextEditingController();
 
@@ -59,7 +57,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // REPOSITORY
   // ==========================================================
 
-  final UserRepository _userRepository = UserRepository();
+  final AuthCoordinator _authCoordinator = AuthCoordinator();
 
   // ==========================================================
   // STATES
@@ -109,9 +107,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // ==========================================================
 
   bool _isValidEmail(String email) {
-    final emailRegex = RegExp(
-      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-    );
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
     return emailRegex.hasMatch(email);
   }
@@ -149,9 +145,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // ----------------------------------------------------------
 
     if (fullName.length < 3) {
-      _showMessage(
-        'Veuillez saisir votre nom complet.',
-      );
+      _showMessage('Veuillez saisir votre nom complet.');
       return;
     }
 
@@ -160,9 +154,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // ----------------------------------------------------------
 
     if (!_isValidEmail(email)) {
-      _showMessage(
-        'Veuillez saisir une adresse email valide.',
-      );
+      _showMessage('Veuillez saisir une adresse email valide.');
       return;
     }
 
@@ -183,9 +175,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // ----------------------------------------------------------
 
     if (password != confirmPasswordController.text) {
-      _showMessage(
-        'Les mots de passe ne correspondent pas.',
-      );
+      _showMessage('Les mots de passe ne correspondent pas.');
       return;
     }
 
@@ -198,42 +188,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // CHECK EMAIL EXISTENCE
       // --------------------------------------------------------
 
-      final existingUser =
-          await _userRepository.findUserByEmail(email);
-
-      if (existingUser != null) {
-        if (!mounted) return;
-
-        _showMessage(
-          'Cette adresse email est déjà utilisée.',
-        );
-
-        setState(() {
-          isCreatingAccount = false;
-        });
-
-        return;
-      }
-
-      // --------------------------------------------------------
-      // CREATE USER
-      // --------------------------------------------------------
-
-      final now = DateTime.now().toIso8601String();
-
-      final user = User(
+      final user = await _authCoordinator.registerEmailAccount(
         fullName: fullName,
         email: email,
-        passwordHash: hashPassword(password),
+        password: password,
         role: selectedRole,
-        isVerified: false,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
       );
-
-      final userId =
-          await _userRepository.registerUser(user);
 
       if (!mounted) return;
 
@@ -245,17 +205,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
         isCreatingAccount = false;
       });
 
-      _showMessage(
-        'Compte créé avec succès.',
-      );
+      _showMessage('Compte créé avec succès.');
+
+      if (user.isVerified) {
+        await _authCoordinator.signOut();
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil<void>(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+          (_) => false,
+        );
+        return;
+      }
 
       // --------------------------------------------------------
       // GO TO EMAIL VERIFICATION
       // --------------------------------------------------------
 
-      await Future.delayed(
-        const Duration(milliseconds: 500),
-      );
+      await Future.delayed(const Duration(milliseconds: 500));
 
       if (!mounted) return;
 
@@ -264,13 +231,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         MaterialPageRoute(
           builder: (context) => EmailVerificationScreen(
             email: email,
+            userId: user.id!,
+            firebaseUid: user.firebaseUid!,
           ),
         ),
       );
 
-      debugPrint(
-        'Utilisateur créé avec ID : $userId',
-      );
+      debugPrint('Utilisateur créé avec ID : ${user.id}');
     } catch (e) {
       if (!mounted) return;
 
@@ -278,15 +245,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
         isCreatingAccount = false;
       });
 
-      _showMessage(
-        'Une erreur est survenue lors de la création '
-        'du compte.',
-      );
+      _showMessage(_registrationErrorMessage(e));
 
-      debugPrint(
-        'Erreur création utilisateur : $e',
-      );
+      debugPrint('Échec de création ou de synchronisation du compte.');
     }
+  }
+
+  String _registrationErrorMessage(Object error) {
+    if (error is AuthFlowException) {
+      return switch (error.error) {
+        AuthFlowError.accountConflict =>
+          'Cette adresse e-mail est déjà utilisée.',
+        AuthFlowError.invalidRole => 'Le rôle sélectionné est invalide.',
+        _ => 'Impossible de créer le compte. Vérifiez vos informations et réessayez.',
+      };
+    }
+    final code = error is FirebaseAuthException ? error.code : '';
+    return switch (code) {
+      'email-already-in-use' => 'Cette adresse e-mail est déjà utilisée.',
+      'wrong-password' || 'invalid-credential' => 'Un compte existe déjà avec cette adresse. Connectez-vous ou réinitialisez son mot de passe.',
+      'weak-password' => 'Le mot de passe choisi est trop faible.',
+      'invalid-email' => 'Cette adresse e-mail est invalide.',
+      'network-request-failed' =>
+        'Réseau indisponible. Vérifiez votre connexion.',
+      _ => 'Compte créé ou non synchronisé. Vérifiez votre connexion puis réessayez.',
+    };
   }
 
   // ==========================================================
@@ -298,9 +281,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }
@@ -330,34 +311,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       filled: true,
       fillColor: Colors.white,
 
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: 17,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
 
-      labelStyle: const TextStyle(
-        color: textGrey,
-        fontWeight: FontWeight.w600,
-      ),
+      labelStyle: const TextStyle(color: textGrey, fontWeight: FontWeight.w600),
 
-      hintStyle: TextStyle(
-        color: textGrey.withValues(alpha: 0.45),
-      ),
+      hintStyle: TextStyle(color: textGrey.withValues(alpha: 0.45)),
 
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(17),
-        borderSide: const BorderSide(
-          color: Color(0xFFE0ECE7),
-          width: 1.3,
-        ),
+        borderSide: const BorderSide(color: Color(0xFFE0ECE7), width: 1.3),
       ),
 
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(17),
-        borderSide: const BorderSide(
-          color: secondaryBlue,
-          width: 1.8,
-        ),
+        borderSide: const BorderSide(color: secondaryBlue, width: 1.8),
       ),
     );
   }
@@ -386,14 +353,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           curve: Curves.easeInOut,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isSelected
-                ? green.withValues(alpha: 0.08)
-                : Colors.white,
+            color: isSelected ? green.withValues(alpha: 0.08) : Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isSelected
-                  ? green
-                  : const Color(0xFFE0ECE7),
+              color: isSelected ? green : const Color(0xFFE0ECE7),
               width: isSelected ? 2 : 1.2,
             ),
             boxShadow: [
@@ -420,9 +383,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     child: Icon(
                       icon,
-                      color: isSelected
-                          ? Colors.white
-                          : primaryBlue,
+                      color: isSelected ? Colors.white : primaryBlue,
                       size: 24,
                     ),
                   ),
@@ -435,22 +396,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     height: 22,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isSelected
-                          ? green
-                          : Colors.transparent,
+                      color: isSelected ? green : Colors.transparent,
                       border: Border.all(
-                        color: isSelected
-                            ? green
-                            : const Color(0xFFB8C9C3),
+                        color: isSelected ? green : const Color(0xFFB8C9C3),
                         width: 1.5,
                       ),
                     ),
                     child: isSelected
-                        ? const Icon(
-                            Icons.check,
-                            color: Colors.white,
-                            size: 14,
-                          )
+                        ? const Icon(Icons.check, color: Colors.white, size: 14)
                         : null,
                   ),
                 ],
@@ -495,707 +448,620 @@ class _RegisterScreenState extends State<RegisterScreen> {
       canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, _) => _handleSystemBack(didPop),
       child: Scaffold(
-      backgroundColor: background,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // ========================================================
-            // DECORATIVE BACKGROUND - TOP
-            // ========================================================
+        backgroundColor: background,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              // ========================================================
+              // DECORATIVE BACKGROUND - TOP
+              // ========================================================
 
-            Positioned(
-              top: -70,
-              right: -55,
-              child: Container(
-                width: 180,
-                height: 180,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: secondaryBlue.withValues(alpha: 0.07),
+              Positioned(
+                top: -70,
+                right: -55,
+                child: Container(
+                  width: 180,
+                  height: 180,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: secondaryBlue.withValues(alpha: 0.07),
+                  ),
                 ),
               ),
-            ),
 
-            // ========================================================
-            // DECORATIVE BACKGROUND - BOTTOM
-            // ========================================================
-
-            Positioned(
-              bottom: -90,
-              left: -70,
-              child: Container(
-                width: 190,
-                height: 190,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: green.withValues(alpha: 0.08),
+              // ========================================================
+              // DECORATIVE BACKGROUND - BOTTOM
+              // ========================================================
+              Positioned(
+                bottom: -90,
+                left: -70,
+                child: Container(
+                  width: 190,
+                  height: 190,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: green.withValues(alpha: 0.08),
+                  ),
                 ),
               ),
-            ),
 
-            // ========================================================
-            // CONTENT
-            // ========================================================
+              // ========================================================
+              // CONTENT
+              // ========================================================
+              SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 30),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ==================================================
+                      // TOP BAR
+                      // ==================================================
 
-            SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  24,
-                  18,
-                  24,
-                  30,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ==================================================
-                    // TOP BAR
-                    // ==================================================
-
-                    Row(
-                      children: [
-                        Material(
-                          color: Colors.white,
-                          borderRadius:
-                              BorderRadius.circular(14),
-                          child: InkWell(
-                            borderRadius:
-                                BorderRadius.circular(14),
-                            onTap: _returnToPreviousScreen,
-                            child: const SizedBox(
-                              width: 46,
-                              height: 46,
-                              child: Icon(
-                                Icons.arrow_back_rounded,
-                                color: primaryBlue,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const Spacer(),
-
-                        Image.asset(
-                          'assets/images/logo.png',
-                          width: 52,
-                          height: 52,
-                          fit: BoxFit.contain,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // ==================================================
-                    // HEADER
-                    // ==================================================
-
-                    const Text(
-                      'Créer un compte',
-                      style: TextStyle(
-                        color: primaryBlue,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.7,
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    Text(
-                      'Rejoignez la communauté Covoit Campus '
-                      'et partagez vos trajets en toute confiance.',
-                      style: TextStyle(
-                        color: textGrey.withValues(alpha: 0.9),
-                        fontSize: 15,
-                        height: 1.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    // ==================================================
-                    // NAME
-                    // ==================================================
-
-                    const Text(
-                      'Nom complet',
-                      style: TextStyle(
-                        color: primaryBlue,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    TextField(
-                      controller: nameController,
-                      onChanged: (_) {
-                        setState(() {});
-                      },
-                      textCapitalization:
-                          TextCapitalization.words,
-                      decoration: _inputDecoration(
-                        label: 'Nom complet',
-                        hint: 'Ex. Khalil Dridi',
-                        icon: Icons.person_outline_rounded,
-                      ),
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    // ==================================================
-                    // EMAIL
-                    // ==================================================
-
-                    const Text(
-                      'Email universitaire',
-                      style: TextStyle(
-                        color: primaryBlue,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    TextField(
-                      controller: emailController,
-                      onChanged: (_) {
-                        setState(() {});
-                      },
-                      keyboardType:
-                          TextInputType.emailAddress,
-                      decoration: _inputDecoration(
-                        label: 'Email universitaire',
-                        hint: 'prenom.nom@universite.tn',
-                        icon: Icons.school_outlined,
-                      ),
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    // ==================================================
-                    // PASSWORD
-                    // ==================================================
-
-                    const Text(
-                      'Mot de passe',
-                      style: TextStyle(
-                        color: primaryBlue,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    TextField(
-                      controller: passwordController,
-                      onChanged: (_) {
-                        setState(() {});
-                      },
-                      obscureText: obscurePassword,
-                      decoration: _inputDecoration(
-                        label: 'Mot de passe',
-                        hint: 'Au moins 8 caractères',
-                        icon: Icons.lock_outline_rounded,
-                        suffixIcon: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              obscurePassword =
-                                  !obscurePassword;
-                            });
-                          },
-                          icon: Icon(
-                            obscurePassword
-                                ? Icons
-                                    .visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: textGrey,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    // ==================================================
-                    // CONFIRM PASSWORD
-                    // ==================================================
-
-                    const Text(
-                      'Confirmer le mot de passe',
-                      style: TextStyle(
-                        color: primaryBlue,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    TextField(
-                      controller:
-                          confirmPasswordController,
-                      onChanged: (_) {
-                        setState(() {});
-                      },
-                      obscureText:
-                          obscureConfirmPassword,
-                      decoration: _inputDecoration(
-                        label: 'Confirmation',
-                        hint: 'Retapez votre mot de passe',
-                        icon: Icons.lock_outline_rounded,
-                        suffixIcon: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              obscureConfirmPassword =
-                                  !obscureConfirmPassword;
-                            });
-                          },
-                          icon: Icon(
-                            obscureConfirmPassword
-                                ? Icons
-                                    .visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: textGrey,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // ==================================================
-                    // PASSWORD INFO
-                    // ==================================================
-
-                    Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.info_outline_rounded,
-                          size: 16,
-                          color: secondaryBlue,
-                        ),
-
-                        const SizedBox(width: 7),
-
-                        Expanded(
-                          child: Text(
-                            'Utilisez au moins 8 caractères avec une '
-                            'combinaison de lettres et de chiffres.',
-                            style: TextStyle(
-                              color: textGrey.withValues(
-                                alpha: 0.78,
-                              ),
-                              fontSize: 11.5,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // ==================================================
-                    // ROLE
-                    // ==================================================
-
-                    const Text(
-                      'Choisissez votre rôle',
-                      style: TextStyle(
-                        color: primaryBlue,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-
-                    const SizedBox(height: 7),
-
-                    Text(
-                      'Votre interface sera adaptée à votre rôle.',
-                      style: TextStyle(
-                        color: textGrey.withValues(alpha: 0.75),
-                        fontSize: 12,
-                        height: 1.4,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        _buildRoleCard(
-                          role: 'passenger',
-                          icon: Icons.backpack_outlined,
-                          title: 'Passager',
-                          description:
-                              'Rechercher et réserver '
-                              'des trajets.',
-                        ),
-
-                        const SizedBox(width: 12),
-
-                        _buildRoleCard(
-                          role: 'driver',
-                          icon:
-                              Icons.directions_car_outlined,
-                          title: 'Conducteur',
-                          description:
-                              'Publier et gérer '
-                              'vos trajets.',
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 22),
-
-                    // ==================================================
-                    // TERMS
-                    // ==================================================
-
-                    Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        Checkbox(
-                          value: acceptedTerms,
-                          activeColor: green,
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(5),
-                          ),
-                          onChanged: (value) {
-                            setState(() {
-                              acceptedTerms =
-                                  value ?? false;
-                            });
-                          },
-                        ),
-
-                        Expanded(
-                          child: Padding(
-                            padding:
-                                const EdgeInsets.only(top: 12),
-                            child: RichText(
-                              text: const TextSpan(
-                                style: TextStyle(
-                                  color: textGrey,
-                                  fontSize: 12,
-                                  height: 1.4,
+                      Row(
+                        children: [
+                          Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: _returnToPreviousScreen,
+                              child: const SizedBox(
+                                width: 46,
+                                height: 46,
+                                child: Icon(
+                                  Icons.arrow_back_rounded,
+                                  color: primaryBlue,
                                 ),
-                                children: [
-                                  TextSpan(
-                                    text: 'J’accepte les ',
-                                  ),
-                                  TextSpan(
-                                    text:
-                                        'conditions d’utilisation',
-                                    style: TextStyle(
-                                      color: primaryBlue,
-                                      fontWeight:
-                                          FontWeight.w700,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: ' et la ',
-                                  ),
-                                  TextSpan(
-                                    text:
-                                        'politique de confidentialité',
-                                    style: TextStyle(
-                                      color: primaryBlue,
-                                      fontWeight:
-                                          FontWeight.w700,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: '.',
-                                  ),
-                                ],
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
 
-                    const SizedBox(height: 20),
+                          const Spacer(),
 
-                    // ==================================================
-                    // CREATE ACCOUNT
-                    // ==================================================
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 58,
-                      child: ElevatedButton(
-                        onPressed:
-                            canSubmit ? _createAccount : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: green,
-                          disabledBackgroundColor:
-                              green.withValues(alpha: 0.35),
-                          foregroundColor: Colors.white,
-                          disabledForegroundColor:
-                              Colors.white.withValues(
-                            alpha: 0.8,
+                          Image.asset(
+                            'assets/images/logo.png',
+                            width: 52,
+                            height: 52,
+                            fit: BoxFit.contain,
                           ),
-                          elevation: 0,
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: isCreatingAccount
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child:
-                                    CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Créer mon compte',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight:
-                                          FontWeight.w700,
-                                    ),
-                                  ),
-                                  SizedBox(width: 10),
-                                  Icon(
-                                    Icons
-                                        .arrow_forward_rounded,
-                                    size: 21,
-                                  ),
-                                ],
-                              ),
+                        ],
                       ),
-                    ),
 
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 28),
 
-                    // ==================================================
-                    // DIVIDER
-                    // ==================================================
-
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Divider(
-                            color: Color(0xFFD8E6E1),
-                            thickness: 1,
-                          ),
+                      // ==================================================
+                      // HEADER
+                      // ==================================================
+                      const Text(
+                        'Créer un compte',
+                        style: TextStyle(
+                          color: primaryBlue,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.7,
                         ),
+                      ),
 
-                        Padding(
-                          padding:
-                              const EdgeInsets.symmetric(
-                            horizontal: 14,
-                          ),
-                          child: Text(
-                            'OU',
-                            style: TextStyle(
-                              color: textGrey.withValues(
-                                alpha: 0.55,
-                              ),
-                              fontSize: 11,
-                              fontWeight:
-                                  FontWeight.w700,
-                            ),
-                          ),
+                      const SizedBox(height: 10),
+
+                      Text(
+                        'Rejoignez la communauté Covoit Campus '
+                        'et partagez vos trajets en toute confiance.',
+                        style: TextStyle(
+                          color: textGrey.withValues(alpha: 0.9),
+                          fontSize: 15,
+                          height: 1.5,
+                          fontWeight: FontWeight.w500,
                         ),
+                      ),
 
-                        const Expanded(
-                          child: Divider(
-                            color: Color(0xFFD8E6E1),
-                            thickness: 1,
-                          ),
+                      const SizedBox(height: 30),
+
+                      // ==================================================
+                      // NAME
+                      // ==================================================
+                      const Text(
+                        'Nom complet',
+                        style: TextStyle(
+                          color: primaryBlue,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
-                      ],
-                    ),
+                      ),
 
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 8),
 
-                    // ==================================================
-                    // GOOGLE
-                    // ==================================================
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          _showMessage(
-                            'Inscription Google disponible '
-                            'prochainement.',
-                          );
+                      TextField(
+                        controller: nameController,
+                        onChanged: (_) {
+                          setState(() {});
                         },
-                        style:
-                            OutlinedButton.styleFrom(
-                          foregroundColor: primaryBlue,
-                          side: const BorderSide(
-                            color: Color(0xFFD5E5DF),
-                            width: 1.4,
-                          ),
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(18),
+                        textCapitalization: TextCapitalization.words,
+                        decoration: _inputDecoration(
+                          label: 'Nom complet',
+                          hint: 'Ex. Khalil Dridi',
+                          icon: Icons.person_outline_rounded,
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ==================================================
+                      // EMAIL
+                      // ==================================================
+                      const Text(
+                        'Email universitaire',
+                        style: TextStyle(
+                          color: primaryBlue,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      TextField(
+                        controller: emailController,
+                        onChanged: (_) {
+                          setState(() {});
+                        },
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: _inputDecoration(
+                          label: 'Email universitaire',
+                          hint: 'prenom.nom@universite.tn',
+                          icon: Icons.school_outlined,
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ==================================================
+                      // PASSWORD
+                      // ==================================================
+                      const Text(
+                        'Mot de passe',
+                        style: TextStyle(
+                          color: primaryBlue,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      TextField(
+                        controller: passwordController,
+                        onChanged: (_) {
+                          setState(() {});
+                        },
+                        obscureText: obscurePassword,
+                        decoration: _inputDecoration(
+                          label: 'Mot de passe',
+                          hint: 'Au moins 8 caractères',
+                          icon: Icons.lock_outline_rounded,
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                obscurePassword = !obscurePassword;
+                              });
+                            },
+                            icon: Icon(
+                              obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: textGrey,
+                            ),
                           ),
                         ),
-                        child: Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 26,
-                              height: 26,
-                              alignment:
-                                  Alignment.center,
-                              decoration:
-                                  BoxDecoration(
-                                color: Colors.white,
-                                shape:
-                                    BoxShape.circle,
-                                border: Border.all(
-                                  color: const Color(
-                                    0xFFE1E8E5,
-                                  ),
-                                ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ==================================================
+                      // CONFIRM PASSWORD
+                      // ==================================================
+                      const Text(
+                        'Confirmer le mot de passe',
+                        style: TextStyle(
+                          color: primaryBlue,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      TextField(
+                        controller: confirmPasswordController,
+                        onChanged: (_) {
+                          setState(() {});
+                        },
+                        obscureText: obscureConfirmPassword,
+                        decoration: _inputDecoration(
+                          label: 'Confirmation',
+                          hint: 'Retapez votre mot de passe',
+                          icon: Icons.lock_outline_rounded,
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                obscureConfirmPassword =
+                                    !obscureConfirmPassword;
+                              });
+                            },
+                            icon: Icon(
+                              obscureConfirmPassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: textGrey,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // ==================================================
+                      // PASSWORD INFO
+                      // ==================================================
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 16,
+                            color: secondaryBlue,
+                          ),
+
+                          const SizedBox(width: 7),
+
+                          Expanded(
+                            child: Text(
+                              'Utilisez au moins 8 caractères avec une '
+                              'combinaison de lettres et de chiffres.',
+                              style: TextStyle(
+                                color: textGrey.withValues(alpha: 0.78),
+                                fontSize: 11.5,
+                                height: 1.4,
                               ),
-                              child: const Text(
-                                'G',
-                                style: TextStyle(
-                                  color:
-                                      Color(0xFF4285F4),
-                                  fontSize: 15,
-                                  fontWeight:
-                                      FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // ==================================================
+                      // ROLE
+                      // ==================================================
+                      const Text(
+                        'Choisissez votre rôle',
+                        style: TextStyle(
+                          color: primaryBlue,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+
+                      const SizedBox(height: 7),
+
+                      Text(
+                        'Votre interface sera adaptée à votre rôle.',
+                        style: TextStyle(
+                          color: textGrey.withValues(alpha: 0.75),
+                          fontSize: 12,
+                          height: 1.4,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildRoleCard(
+                            role: 'passenger',
+                            icon: Icons.backpack_outlined,
+                            title: 'Passager',
+                            description:
+                                'Rechercher et réserver '
+                                'des trajets.',
+                          ),
+
+                          const SizedBox(width: 12),
+
+                          _buildRoleCard(
+                            role: 'driver',
+                            icon: Icons.directions_car_outlined,
+                            title: 'Conducteur',
+                            description:
+                                'Publier et gérer '
+                                'vos trajets.',
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      // ==================================================
+                      // TERMS
+                      // ==================================================
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Checkbox(
+                            value: acceptedTerms,
+                            activeColor: green,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            onChanged: (value) {
+                              setState(() {
+                                acceptedTerms = value ?? false;
+                              });
+                            },
+                          ),
+
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: RichText(
+                                text: const TextSpan(
+                                  style: TextStyle(
+                                    color: textGrey,
+                                    fontSize: 12,
+                                    height: 1.4,
+                                  ),
+                                  children: [
+                                    TextSpan(text: 'J’accepte les '),
+                                    TextSpan(
+                                      text: 'conditions d’utilisation',
+                                      style: TextStyle(
+                                        color: primaryBlue,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    TextSpan(text: ' et la '),
+                                    TextSpan(
+                                      text: 'politique de confidentialité',
+                                      style: TextStyle(
+                                        color: primaryBlue,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    TextSpan(text: '.'),
+                                  ],
                                 ),
                               ),
                             ),
+                          ),
+                        ],
+                      ),
 
-                            const SizedBox(width: 10),
+                      const SizedBox(height: 20),
 
-                            const Text(
-                              'Continuer avec Google',
+                      // ==================================================
+                      // CREATE ACCOUNT
+                      // ==================================================
+                      SizedBox(
+                        width: double.infinity,
+                        height: 58,
+                        child: ElevatedButton(
+                          onPressed: canSubmit ? _createAccount : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: green,
+                            disabledBackgroundColor: green.withValues(
+                              alpha: 0.35,
+                            ),
+                            foregroundColor: Colors.white,
+                            disabledForegroundColor: Colors.white.withValues(
+                              alpha: 0.8,
+                            ),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: isCreatingAccount
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Créer mon compte',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    SizedBox(width: 10),
+                                    Icon(Icons.arrow_forward_rounded, size: 21),
+                                  ],
+                                ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ==================================================
+                      // DIVIDER
+                      // ==================================================
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Divider(
+                              color: Color(0xFFD8E6E1),
+                              thickness: 1,
+                            ),
+                          ),
+
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Text(
+                              'OU',
                               style: TextStyle(
-                                fontSize: 15,
-                                fontWeight:
-                                    FontWeight.w700,
+                                color: textGrey.withValues(alpha: 0.55),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+
+                          const Expanded(
+                            child: Divider(
+                              color: Color(0xFFD8E6E1),
+                              thickness: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ==================================================
+                      // GOOGLE
+                      // ==================================================
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            _showMessage(
+                              'Inscription Google disponible '
+                              'prochainement.',
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: primaryBlue,
+                            side: const BorderSide(
+                              color: Color(0xFFD5E5DF),
+                              width: 1.4,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 26,
+                                height: 26,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFFE1E8E5),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'G',
+                                  style: TextStyle(
+                                    color: Color(0xFF4285F4),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(width: 10),
+
+                              const Text(
+                                'Continuer avec Google',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // ==================================================
+                      // LOGIN LINK
+                      // ==================================================
+                      Center(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          children: [
+                            Text(
+                              'Vous avez déjà un compte ? ',
+                              style: TextStyle(
+                                color: textGrey.withValues(alpha: 0.78),
+                                fontSize: 13,
+                              ),
+                            ),
+
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const LoginScreen(),
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Se connecter',
+                                style: TextStyle(
+                                  color: primaryBlue,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-                    // ==================================================
-                    // LOGIN LINK
-                    // ==================================================
-
-                    Center(
-                      child: Wrap(
-                        alignment:
-                            WrapAlignment.center,
-                        children: [
-                          Text(
-                            'Vous avez déjà un compte ? ',
-                            style: TextStyle(
-                              color: textGrey.withValues(
-                                alpha: 0.78,
-                              ),
-                              fontSize: 13,
+                      // ==================================================
+                      // FOOTER
+                      // ==================================================
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.security_rounded,
+                              size: 14,
+                              color: textGrey.withValues(alpha: 0.55),
                             ),
-                          ),
 
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const LoginScreen(),
-                                ),
-                              );
-                            },
-                            child: const Text(
-                              'Se connecter',
+                            const SizedBox(width: 6),
+
+                            Text(
+                              'Vos données restent protégées',
                               style: TextStyle(
-                                color: primaryBlue,
-                                fontSize: 13,
-                                fontWeight:
-                                    FontWeight.w800,
+                                color: textGrey.withValues(alpha: 0.55),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // ==================================================
-                    // FOOTER
-                    // ==================================================
-
-                    Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.security_rounded,
-                            size: 14,
-                            color: textGrey.withValues(
-                              alpha: 0.55,
-                            ),
-                          ),
-
-                          const SizedBox(width: 6),
-
-                          Text(
-                            'Vos données restent protégées',
-                            style: TextStyle(
-                              color:
-                                  textGrey.withValues(
-                                alpha: 0.55,
-                              ),
-                              fontSize: 11,
-                              fontWeight:
-                                  FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

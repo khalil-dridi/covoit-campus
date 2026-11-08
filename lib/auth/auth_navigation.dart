@@ -6,6 +6,7 @@ import '../screens/driver/driver_shell.dart';
 import '../screens/passenger/passenger_shell.dart';
 
 Widget? roleShellFor(User user) {
+  if (!user.isVerified || !user.isActive) return null;
   switch (user.role) {
     case 'passenger':
       return PassengerShell(user: user);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
+import '../../widgets/shared/responsive_navigation_bar.dart';
 import 'dashboard/admin_dashboard_screen.dart';
 import 'trips/admin_trips_screen.dart';
 import 'users/admin_users_screen.dart';
@@ -48,7 +49,7 @@ class _AdminShellState extends State<AdminShell> {
         children: pages,
       ),
 
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: ResponsiveNavigationBar(
         selectedIndex: _currentIndex,
 
         onDestinationSelected: (index) {

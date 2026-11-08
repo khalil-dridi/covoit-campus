@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
 
+import '../../../auth/auth_coordinator.dart';
 import '../../../models/user.dart';
 import '../../../repositories/user_repository.dart';
-import '../../../utils/password_hasher.dart';
 import '../../../utils/logout_flow.dart';
 
 class AdminProfileScreen extends StatefulWidget {
@@ -29,6 +30,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   static const _border = Color(0xFFE6EDF3);
 
   final UserRepository _repository = UserRepository();
+  final AuthCoordinator _authCoordinator = AuthCoordinator();
   User? _admin;
   bool _loading = true;
   String? _error;
@@ -804,11 +806,18 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                         saveError = null;
                       });
                       try {
-                        final changed = await _repository.changeAdminPassword(
-                          userId: id,
-                          currentPasswordHash: hashPassword(current.text),
-                          newPasswordHash: hashPassword(next.text),
-                        );
+                        final admin = _admin;
+                        if (admin == null || admin.id != id) {
+                          throw StateError(
+                            'Profil administrateur indisponible.',
+                          );
+                        }
+                        final changed = await _authCoordinator
+                            .changeAdminPassword(
+                              admin: admin,
+                              currentPassword: current.text,
+                              newPassword: next.text,
+                            );
                         if (!dialogContext.mounted) return;
                         if (!changed) {
                           setDialogState(() {
@@ -819,11 +828,18 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                         }
                         if (!dialogContext.mounted) return;
                         Navigator.of(dialogContext).pop(true);
-                      } catch (_) {
+                      } catch (error) {
                         if (!dialogContext.mounted) return;
                         setDialogState(() {
                           saving = false;
-                          saveError = 'Impossible de modifier le mot de passe. Réessayez.';
+                          saveError =
+                              error is FirebaseAuthException &&
+                                  error.code == 'wrong-password'
+                              ? 'Mot de passe actuel incorrect.'
+                              : error is FirebaseAuthException &&
+                                    error.code == 'network-request-failed'
+                              ? 'Réseau indisponible. Réessayez.'
+                              : 'Impossible de modifier le mot de passe. Réessayez.';
                         });
                       }
                     },

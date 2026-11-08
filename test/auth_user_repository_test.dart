@@ -45,7 +45,7 @@ void main() {
 
       expect(linked.id, id);
       expect(linked.role, 'driver');
-      expect(linked.passwordHash, hashPassword('legacy-pass-123'));
+      expect(linked.passwordHash, isEmpty);
       expect(linked.firebaseUid, 'firebase-link-$id');
       expect(linked.isVerified, isTrue);
     },
@@ -155,6 +155,73 @@ void main() {
           ),
         ),
       );
+    },
+  );
+
+  test('creates Firebase profile and syncs verification by UID', () async {
+    final unique = DateTime.now().microsecondsSinceEpoch;
+    final now = DateTime.now().toIso8601String();
+    final email = 'firebase-$unique@example.tn';
+    final created = await repository.registerFirebaseUser(
+      User(
+        fullName: 'Firebase Passenger',
+        email: email,
+        passwordHash: '',
+        firebaseUid: 'firebase-profile-$unique',
+        role: 'passenger',
+        isVerified: false,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    addTearDown(() async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('users', where: 'id = ?', whereArgs: [created.id]);
+    });
+
+    expect(created.isVerified, isFalse);
+    final synced = await repository.syncFirebaseVerification(
+      'firebase-profile-$unique',
+      true,
+    );
+    expect(synced?.id, created.id);
+    expect(synced?.role, 'passenger');
+    expect(synced?.isVerified, isTrue);
+  });
+
+  test(
+    'links authenticated legacy profile without changing role or row ID',
+    () async {
+      final unique = DateTime.now().microsecondsSinceEpoch;
+      final now = DateTime.now().toIso8601String();
+      final email = 'legacy-link-$unique@example.tn';
+      final id = await repository.registerUser(
+        User(
+          fullName: 'Legacy Driver',
+          email: email,
+          passwordHash: hashPassword('legacy-pass-123'),
+          role: 'driver',
+          isVerified: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      addTearDown(() async {
+        final db = await DatabaseHelper.instance.database;
+        await db.delete('users', where: 'id = ?', whereArgs: [id]);
+      });
+
+      final linked = await repository.linkAuthenticatedEmailAccount(
+        userId: id,
+        email: email,
+        firebaseUid: 'firebase-legacy-$unique',
+        emailVerified: false,
+      );
+      expect(linked.id, id);
+      expect(linked.role, 'driver');
+      expect(linked.firebaseUid, 'firebase-legacy-$unique');
+      expect(linked.passwordHash, isEmpty);
+      expect(linked.isVerified, isFalse);
     },
   );
 }

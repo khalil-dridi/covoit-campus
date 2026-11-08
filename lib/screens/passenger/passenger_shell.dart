@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../../widgets/messages/message_badge.dart';
+import '../../widgets/shared/responsive_navigation_bar.dart';
 import '../shared/messages/conversations_screen.dart';
 import 'home/passenger_home_screen.dart';
 import 'profile/passenger_profile_screen.dart';
@@ -44,7 +45,7 @@ class _PassengerShellState extends State<PassengerShell> {
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: pages),
 
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: ResponsiveNavigationBar(
         selectedIndex: _currentIndex,
 
         onDestinationSelected: (index) {

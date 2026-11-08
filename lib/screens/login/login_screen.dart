@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
 
 import '../../auth/auth_coordinator.dart';
 import '../../auth/auth_navigation.dart';
@@ -8,7 +9,7 @@ import '../../models/user.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/firebase_auth_service.dart';
 import '../register/register_screen.dart';
-import '../../utils/password_hasher.dart';
+import '../verification/email_verification_screen.dart';
 import '../welcome/welcome_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -129,70 +130,11 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // --------------------------------------------------------
-      // FIND USER
-      // --------------------------------------------------------
-
-      final User? user = await _userRepository.findUserByEmail(email);
-
+      final User user = await _authCoordinator.signInWithPassword(
+        email: email,
+        password: password,
+      );
       if (!mounted) return;
-
-      if (user == null) {
-        setState(() {
-          isLoggingIn = false;
-        });
-
-        _showMessage('Aucun compte associé à cette adresse email.');
-
-        return;
-      }
-
-      // --------------------------------------------------------
-      // ACTIVE ACCOUNT
-      // --------------------------------------------------------
-
-      if (!user.isActive) {
-        setState(() {
-          isLoggingIn = false;
-        });
-
-        _showMessage('Ce compte a été désactivé.');
-
-        return;
-      }
-
-      // --------------------------------------------------------
-      // PASSWORD
-      // --------------------------------------------------------
-
-      final passwordHash = hashPassword(password);
-
-      if (passwordHash != user.passwordHash) {
-        setState(() {
-          isLoggingIn = false;
-        });
-
-        _showMessage('Email ou mot de passe incorrect.');
-
-        return;
-      }
-
-      // --------------------------------------------------------
-      // EMAIL VERIFIED
-      // --------------------------------------------------------
-
-      if (!user.isVerified) {
-        setState(() {
-          isLoggingIn = false;
-        });
-
-        _showMessage(
-          'Veuillez vérifier votre adresse email '
-          'avant de vous connecter.',
-        );
-
-        return;
-      }
 
       // --------------------------------------------------------
       // SUCCESS
@@ -208,13 +150,97 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
 
+      if (e is AuthFlowException && e.error == AuthFlowError.emailNotVerified) {
+        final user = await _userRepository.findUserByEmail(email);
+        if (!mounted) return;
+        if (user?.id != null && user?.firebaseUid != null && mounted) {
+          setState(() => isLoggingIn = false);
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => EmailVerificationScreen(
+                email: email,
+                userId: user!.id!,
+                firebaseUid: user.firebaseUid!,
+              ),
+            ),
+          );
+          return;
+        }
+      }
+
       setState(() {
         isLoggingIn = false;
       });
 
-      _showMessage('Une erreur est survenue lors de la connexion.');
+      _showMessage(_loginErrorMessage(e));
 
-      debugPrint('Erreur login : $e');
+      debugPrint('Échec de connexion e-mail/mot de passe.');
+    }
+  }
+
+  String _loginErrorMessage(Object error) {
+    if (error is AuthFlowException) {
+      return switch (error.error) {
+        AuthFlowError.invalidCredentials => 'E-mail ou mot de passe incorrect.',
+        AuthFlowError.inactiveAccount => 'Ce compte a été désactivé.',
+        AuthFlowError.accountConflict =>
+          'Ce compte Firebase ne correspond pas au profil local.',
+        AuthFlowError.emailNotVerified =>
+          'Vérifiez votre adresse e-mail avant de vous connecter.',
+        _ => 'Connexion impossible. Réessayez.',
+      };
+    }
+    final code = error is FirebaseAuthException ? error.code : '';
+    return switch (code) {
+      'user-not-found' ||
+      'wrong-password' ||
+      'invalid-credential' => 'E-mail ou mot de passe incorrect.',
+      'network-request-failed' =>
+        'Réseau indisponible. Vérifiez votre connexion.',
+      'too-many-requests' => 'Trop de tentatives. Réessayez plus tard.',
+      'user-disabled' => 'Ce compte Firebase a été désactivé.',
+      _ => 'Une erreur est survenue lors de la connexion.',
+    };
+  }
+
+  Future<void> _forgotPassword() async {
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    final email = await showDialog<String>(
+      context: context,
+      builder: (_) =>
+          _ForgotPasswordDialog(initialEmail: emailController.text.trim()),
+    );
+    if (email == null || !mounted) return;
+    if (!emailRegex.hasMatch(email)) {
+      _showMessage('Veuillez saisir une adresse e-mail valide.');
+      return;
+    }
+    try {
+      final localUser = await _userRepository.findUserByEmail(email);
+      if (!mounted) return;
+      if (localUser != null && localUser.firebaseUid == null) {
+        if (mounted) {
+          _showMessage(
+            'Ancien compte détecté. Connectez-vous une fois avec votre mot de passe actuel pour activer sa migration, puis demandez la réinitialisation.',
+          );
+        }
+        return;
+      }
+      await _authCoordinator.sendPasswordResetEmail(email);
+      if (mounted)
+        _showMessage(
+          'Si un compte correspond à cette adresse, un lien de réinitialisation a été envoyé.',
+        );
+    } catch (error) {
+      if (!mounted) return;
+      final code = error is FirebaseAuthException ? error.code : '';
+      _showMessage(switch (code) {
+        'invalid-email' => 'Cette adresse e-mail est invalide.',
+        'network-request-failed' =>
+          'Réseau indisponible. Vérifiez votre connexion.',
+        'too-many-requests' => 'Trop de tentatives. Réessayez plus tard.',
+        _ => 'Impossible d’envoyer le lien. Vérifiez l’adresse et réessayez.',
+      });
     }
   }
 
@@ -232,6 +258,10 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       final resolution = await _authCoordinator.resolveGoogleIdentity(identity);
+      if (!mounted) {
+        await _authCoordinator.signOut();
+        return;
+      }
       User? user;
 
       if (resolution.status == GoogleProfileStatus.authenticated) {
@@ -239,6 +269,10 @@ class _LoginScreenState extends State<LoginScreen> {
       } else if (resolution.status == GoogleProfileStatus.linkExistingAccount) {
         final existingUser = resolution.user!;
         final password = await _askExistingAccountPassword(existingUser);
+        if (!mounted) {
+          await _authCoordinator.signOut();
+          return;
+        }
         if (password == null) {
           await _authCoordinator.signOut();
           return;
@@ -250,6 +284,10 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else if (resolution.status == GoogleProfileStatus.createNewAccount) {
         final profile = await _askNewGoogleProfile(identity);
+        if (!mounted) {
+          await _authCoordinator.signOut();
+          return;
+        }
         if (profile == null) {
           await _authCoordinator.signOut();
           return;
@@ -287,138 +325,28 @@ class _LoginScreenState extends State<LoginScreen> {
         debugPrint('Échec de nettoyage Firebase : $signOutError');
       }
       if (mounted) _showMessage(_googleErrorMessage(error));
-      debugPrint('Erreur Google Sign-In : $error');
+      debugPrint('Échec de connexion Google.');
     } finally {
       if (mounted) setState(() => isLoggingIn = false);
     }
   }
 
   Future<String?> _askExistingAccountPassword(User user) async {
-    final controller = TextEditingController();
-    var obscure = true;
-    try {
-      return await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Associer votre compte'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Un compte existe déjà pour ${user.email}. '
-                  'Saisissez son mot de passe pour conserver votre profil '
-                  'et votre rôle.',
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  obscureText: obscure,
-                  decoration: InputDecoration(
-                    labelText: 'Mot de passe actuel',
-                    suffixIcon: IconButton(
-                      onPressed: () => setDialogState(() => obscure = !obscure),
-                      icon: Icon(
-                        obscure ? Icons.visibility_off : Icons.visibility,
-                      ),
-                    ),
-                  ),
-                  onSubmitted: (_) =>
-                      Navigator.pop(dialogContext, controller.text),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Annuler'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, controller.text),
-                child: const Text('Vérifier et associer'),
-              ),
-            ],
-          ),
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ExistingAccountPasswordDialog(email: user.email),
+    );
   }
 
   Future<_GoogleProfileData?> _askNewGoogleProfile(
     GoogleAuthIdentity identity,
   ) async {
-    final nameController = TextEditingController(
-      text: identity.displayName?.trim() ?? '',
+    return showDialog<_GoogleProfileData>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _NewGoogleProfileDialog(identity: identity),
     );
-    var role = 'passenger';
-    try {
-      return await showDialog<_GoogleProfileData>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Compléter votre profil'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Nom complet'),
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(identity.email ?? ''),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: role,
-                  decoration: const InputDecoration(labelText: 'Votre rôle'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'passenger',
-                      child: Text('Passager'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'driver',
-                      child: Text('Conducteur'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setDialogState(() => role = value);
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Annuler'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final fullName = nameController.text.trim();
-                  if (fullName.length < 3) return;
-                  Navigator.pop(
-                    dialogContext,
-                    _GoogleProfileData(fullName: fullName, role: role),
-                  );
-                },
-                child: const Text('Continuer'),
-              ),
-            ],
-          ),
-        ),
-      );
-    } finally {
-      nameController.dispose();
-    }
   }
 
   String _googleResolutionMessage(GoogleProfileStatus status) {
@@ -429,6 +357,8 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Cet e-mail ou cet UID Google est déjà associé à un autre compte.';
       case GoogleProfileStatus.invalidIdentity:
         return 'Le compte Google ne fournit pas une adresse e-mail valide.';
+      case GoogleProfileStatus.unverified:
+        return 'Google n’a pas confirmé cette adresse e-mail.';
       case GoogleProfileStatus.authenticated:
       case GoogleProfileStatus.linkExistingAccount:
       case GoogleProfileStatus.createNewAccount:
@@ -451,6 +381,10 @@ class _LoginScreenState extends State<LoginScreen> {
           return 'Le rôle choisi n’est pas autorisé.';
         case AuthFlowError.invalidIdentity:
           return 'Les informations du compte Google sont incomplètes.';
+        case AuthFlowError.invalidCredentials:
+          return 'E-mail ou mot de passe incorrect.';
+        case AuthFlowError.emailNotVerified:
+          return 'Vérifiez votre adresse e-mail avant de continuer.';
       }
     }
     final value = error.toString();
@@ -748,12 +682,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         alignment: Alignment.centerRight,
 
                         child: TextButton(
-                          onPressed: () {
-                            _showMessage(
-                              'La récupération du mot '
-                              'de passe sera ajoutée prochainement.',
-                            );
-                          },
+                          onPressed: _forgotPassword,
 
                           child: const Text(
                             'Mot de passe oublié ?',
@@ -1125,4 +1054,188 @@ class _GoogleProfileData {
   final String role;
 
   const _GoogleProfileData({required this.fullName, required this.role});
+}
+
+class _ForgotPasswordDialog extends StatefulWidget {
+  const _ForgotPasswordDialog({required this.initialEmail});
+
+  final String initialEmail;
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  late final TextEditingController _emailController;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Réinitialiser le mot de passe'),
+    content: TextField(
+      controller: _emailController,
+      keyboardType: TextInputType.emailAddress,
+      decoration: const InputDecoration(labelText: 'Adresse e-mail'),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Annuler'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _emailController.text.trim()),
+        child: const Text('Envoyer'),
+      ),
+    ],
+  );
+}
+
+class _ExistingAccountPasswordDialog extends StatefulWidget {
+  const _ExistingAccountPasswordDialog({required this.email});
+
+  final String email;
+
+  @override
+  State<_ExistingAccountPasswordDialog> createState() =>
+      _ExistingAccountPasswordDialogState();
+}
+
+class _ExistingAccountPasswordDialogState
+    extends State<_ExistingAccountPasswordDialog> {
+  final TextEditingController _passwordController = TextEditingController();
+  bool _obscure = true;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Associer votre compte'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Un compte existe déjà pour ${widget.email}. '
+          'Saisissez son mot de passe pour conserver votre profil et votre rôle.',
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _passwordController,
+          autofocus: true,
+          obscureText: _obscure,
+          decoration: InputDecoration(
+            labelText: 'Mot de passe actuel',
+            suffixIcon: IconButton(
+              onPressed: () => setState(() => _obscure = !_obscure),
+              icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+            ),
+          ),
+          onSubmitted: (_) => Navigator.pop(context, _passwordController.text),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Annuler'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _passwordController.text),
+        child: const Text('Vérifier et associer'),
+      ),
+    ],
+  );
+}
+
+class _NewGoogleProfileDialog extends StatefulWidget {
+  const _NewGoogleProfileDialog({required this.identity});
+
+  final GoogleAuthIdentity identity;
+
+  @override
+  State<_NewGoogleProfileDialog> createState() =>
+      _NewGoogleProfileDialogState();
+}
+
+class _NewGoogleProfileDialogState extends State<_NewGoogleProfileDialog> {
+  late final TextEditingController _nameController;
+  String _role = 'passenger';
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(
+      text: widget.identity.displayName?.trim() ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Compléter votre profil'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: _nameController,
+          decoration: const InputDecoration(labelText: 'Nom complet'),
+          textCapitalization: TextCapitalization.words,
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(widget.identity.email ?? ''),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: _role,
+          decoration: const InputDecoration(labelText: 'Votre rôle'),
+          items: const [
+            DropdownMenuItem(value: 'passenger', child: Text('Passager')),
+            DropdownMenuItem(value: 'driver', child: Text('Conducteur')),
+          ],
+          onChanged: (value) {
+            if (value != null) setState(() => _role = value);
+          },
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Annuler'),
+      ),
+      FilledButton(
+        onPressed: () {
+          final fullName = _nameController.text.trim();
+          if (fullName.length < 3) return;
+          Navigator.pop(
+            context,
+            _GoogleProfileData(fullName: fullName, role: _role),
+          );
+        },
+        child: const Text('Continuer'),
+      ),
+    ],
+  );
 }

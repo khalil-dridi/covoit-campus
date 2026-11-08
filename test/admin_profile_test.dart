@@ -4,7 +4,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:covoit_campus/database/database_helper.dart';
 import 'package:covoit_campus/models/user.dart';
 import 'package:covoit_campus/repositories/user_repository.dart';
-import 'package:covoit_campus/utils/password_hasher.dart';
 
 void main() {
   setUpAll(() {
@@ -22,6 +21,7 @@ void main() {
         fullName: 'Profile Admin',
         email: 'profile-admin-$unique@covoitcampus.tn',
         passwordHash: 'unchanged-hash',
+        firebaseUid: 'admin-firebase-$unique',
         role: 'admin',
         isVerified: true,
         isActive: true,
@@ -48,33 +48,8 @@ void main() {
     expect(updated?.role, 'admin');
     expect(updated?.email, 'profile-admin-$unique@covoitcampus.tn');
 
-    expect(
-      await repository.changeAdminPassword(
-        userId: id,
-        currentPasswordHash: hashPassword('wrong password'),
-        newPasswordHash: hashPassword('Newpass123'),
-      ),
-      isFalse,
-    );
-    expect(
-      await repository.changeAdminPassword(
-        userId: id,
-        currentPasswordHash: 'unchanged-hash',
-        newPasswordHash: hashPassword('Newpass123'),
-      ),
-      isTrue,
-    );
-    expect(
-      (await repository.getUserById(id))?.passwordHash,
-      hashPassword('Newpass123'),
-    );
-    expect(
-      await repository.loginUser(
-        'profile-admin-$unique@covoitcampus.tn',
-        hashPassword('Newpass123'),
-      ),
-      isNotNull,
-    );
+    expect(await repository.changeAdminPassword(userId: id), isTrue);
+    expect((await repository.getUserById(id))?.passwordHash, isEmpty);
   });
 
   test('admin profile update cannot modify non-admin accounts', () async {

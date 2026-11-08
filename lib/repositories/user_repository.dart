@@ -16,21 +16,114 @@ class UserRepository {
     );
   }
 
-  Future<User?> loginUser(String email, String passwordHash) async {
-    final db = await _databaseHelper.database;
-
-    final result = await db.query(
-      'users',
-      where: 'email = ? AND password_hash = ? AND is_active = 1',
-      whereArgs: [email, passwordHash],
-      limit: 1,
-    );
-
-    if (result.isEmpty) {
-      return null;
+  Future<User> registerFirebaseUser(User user) async {
+    if (user.firebaseUid == null || user.firebaseUid!.isEmpty) {
+      throw ArgumentError('Un UID Firebase est requis.');
     }
+    final db = await _databaseHelper.database;
+    return db.transaction((txn) async {
+      final existing = await txn.query(
+        'users',
+        columns: ['id'],
+        where: 'LOWER(email) = ?',
+        whereArgs: [user.email.trim().toLowerCase()],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        throw const UserProfileConflictException(
+          UserProfileConflictReason.emailAlreadyExists,
+        );
+      }
+      final id = await txn.insert(
+        'users',
+        user.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+      final rows = await txn.query('users', where: 'id = ?', whereArgs: [id]);
+      return User.fromMap(rows.single);
+    });
+  }
 
-    return User.fromMap(result.first);
+  /// Links a locally verified legacy profile to an already authenticated
+  /// Firebase email identity without replacing its local data or role.
+  Future<User> linkAuthenticatedEmailAccount({
+    required int userId,
+    required String email,
+    required String firebaseUid,
+    required bool emailVerified,
+  }) async {
+    final db = await _databaseHelper.database;
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (rows.isEmpty)
+        throw const UserProfileConflictException(
+          UserProfileConflictReason.accountChanged,
+        );
+      final current = User.fromMap(rows.single);
+      if (current.email.trim().toLowerCase() != email.trim().toLowerCase()) {
+        throw const UserProfileConflictException(
+          UserProfileConflictReason.accountChanged,
+        );
+      }
+      if (!current.isActive)
+        throw const UserProfileConflictException(
+          UserProfileConflictReason.inactive,
+        );
+      if (current.firebaseUid != null && current.firebaseUid != firebaseUid) {
+        throw const UserProfileConflictException(
+          UserProfileConflictReason.uidAlreadyLinked,
+        );
+      }
+      final other = await txn.query(
+        'users',
+        columns: ['id'],
+        where: 'firebase_uid = ? AND id != ?',
+        whereArgs: [firebaseUid, userId],
+        limit: 1,
+      );
+      if (other.isNotEmpty)
+        throw const UserProfileConflictException(
+          UserProfileConflictReason.uidAlreadyLinked,
+        );
+      final updates = <String, Object?>{
+        'firebase_uid': firebaseUid,
+        // Firebase is now the password authority; discard the legacy verifier.
+        'password_hash': '',
+        'is_verified': emailVerified ? 1 : 0,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      await txn.update('users', updates, where: 'id = ?', whereArgs: [userId]);
+      final updated = await txn.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      return User.fromMap(updated.single);
+    });
+  }
+
+  Future<User?> syncFirebaseVerification(
+    String firebaseUid,
+    bool verified,
+  ) async {
+    final db = await _databaseHelper.database;
+    await db.update(
+      'users',
+      {
+        'password_hash': '',
+        'is_verified': verified ? 1 : 0,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'firebase_uid = ?',
+      whereArgs: [firebaseUid],
+    );
+    return findUserByFirebaseUid(firebaseUid);
   }
 
   Future<User?> findUserByEmail(String email) async {
@@ -116,6 +209,7 @@ class UserRepository {
 
       final updates = <String, Object?>{
         'firebase_uid': firebaseUid,
+        'password_hash': '',
         'updated_at': DateTime.now().toIso8601String(),
       };
       if (emailVerified) updates['is_verified'] = 1;
@@ -221,33 +315,16 @@ class UserRepository {
     return result.isEmpty ? null : User.fromMap(result.first);
   }
 
-  Future<bool> changeAdminPassword({
-    required int userId,
-    required String currentPasswordHash,
-    required String newPasswordHash,
-  }) async {
+  Future<bool> changeAdminPassword({required int userId}) async {
     final db = await _databaseHelper.database;
     final changed = await db.update(
       'users',
-      {
-        'password_hash': newPasswordHash,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ? AND role = ? AND is_active = 1 AND password_hash = ?',
-      whereArgs: [userId, 'admin', currentPasswordHash],
+      {'password_hash': '', 'updated_at': DateTime.now().toIso8601String()},
+      where:
+          'id = ? AND role = ? AND is_active = ? AND firebase_uid IS NOT NULL',
+      whereArgs: [userId, 'admin', 1],
     );
     return changed == 1;
-  }
-
-  Future<int> verifyUser(int userId) async {
-    final db = await _databaseHelper.database;
-
-    return await db.update(
-      'users',
-      {'is_verified': 1, 'updated_at': DateTime.now().toIso8601String()},
-      where: 'id = ?',
-      whereArgs: [userId],
-    );
   }
 
   Future<int> updateUserProfile({

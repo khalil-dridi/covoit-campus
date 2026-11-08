@@ -9,6 +9,7 @@ class GoogleAuthIdentity {
   final String? displayName;
   final String? photoUrl;
   final bool emailVerified;
+  final bool isGoogleProvider;
 
   const GoogleAuthIdentity({
     required this.uid,
@@ -16,6 +17,7 @@ class GoogleAuthIdentity {
     required this.displayName,
     required this.photoUrl,
     required this.emailVerified,
+    this.isGoogleProvider = false,
   });
 
   factory GoogleAuthIdentity.fromFirebaseUser(firebase_auth.User user) {
@@ -25,6 +27,9 @@ class GoogleAuthIdentity {
       displayName: user.displayName,
       photoUrl: user.photoURL,
       emailVerified: user.emailVerified,
+      isGoogleProvider: user.providerData.any(
+        (provider) => provider.providerId == 'google.com',
+      ),
     );
   }
 }
@@ -78,6 +83,118 @@ class FirebaseAuthService {
     return currentUser == null
         ? null
         : GoogleAuthIdentity.fromFirebaseUser(currentUser);
+  }
+
+  Future<GoogleAuthIdentity> createEmailAccount({
+    required String email,
+    required String password,
+  }) async {
+    final result = await _auth.createUserWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+    final user = result.user;
+    if (user == null)
+      throw StateError('Firebase n’a pas retourné d’utilisateur.');
+    return GoogleAuthIdentity.fromFirebaseUser(user);
+  }
+
+  Future<GoogleAuthIdentity> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final result = await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+    final user = result.user;
+    if (user == null)
+      throw StateError('Firebase n’a pas retourné d’utilisateur.');
+    return GoogleAuthIdentity.fromFirebaseUser(user);
+  }
+
+  Future<GoogleAuthIdentity?> reloadCurrentUser() async {
+    if (_authOverride == null && Firebase.apps.isEmpty) return null;
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    await user.reload();
+    final refreshed = _auth.currentUser;
+    return refreshed == null
+        ? null
+        : GoogleAuthIdentity.fromFirebaseUser(refreshed);
+  }
+
+  Future<void> sendEmailVerification({required String expectedUid}) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('Aucun utilisateur Firebase connecté.');
+    if (user.uid != expectedUid) {
+      debugPrint(
+        'Vérification e-mail annulée : UID Firebase actif différent du profil '
+        '(actif=${_shortUid(user.uid)}, attendu=${_shortUid(expectedUid)}).',
+      );
+      throw StateError('Le compte Firebase actif ne correspond pas au profil.');
+    }
+
+    debugPrint(
+      'Envoi vérification Firebase démarré '
+      '(uid=${_shortUid(user.uid)}, email=${_maskedEmail(user.email)}).',
+    );
+    try {
+      await user.sendEmailVerification();
+      debugPrint(
+        'Envoi vérification Firebase terminé avec succès '
+        '(uid=${_shortUid(user.uid)}).',
+      );
+    } on firebase_auth.FirebaseAuthException catch (error) {
+      debugPrint(
+        'Échec envoi vérification Firebase '
+        '(uid=${_shortUid(user.uid)}, code=${error.code}).',
+      );
+      rethrow;
+    } catch (error) {
+      debugPrint(
+        'Échec inattendu envoi vérification Firebase '
+        '(uid=${_shortUid(user.uid)}, type=${error.runtimeType}).',
+      );
+      rethrow;
+    }
+  }
+
+  String _shortUid(String uid) =>
+      uid.length <= 6 ? uid : '…${uid.substring(uid.length - 6)}';
+
+  String _maskedEmail(String? email) {
+    if (email == null || email.isEmpty) return 'indisponible';
+    final at = email.indexOf('@');
+    if (at <= 0 || at == email.length - 1) return 'masquée';
+    final local = email.substring(0, at);
+    return '${local.substring(0, 1)}***${email.substring(at)}';
+  }
+
+  Future<void> sendPasswordResetEmail(String email) =>
+      _auth.sendPasswordResetEmail(email: email.trim());
+
+  Future<void> updateCurrentPassword(String password) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('Aucun utilisateur Firebase connecté.');
+    await user.updatePassword(password);
+  }
+
+  Future<void> changeCurrentPassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) {
+      throw StateError('Aucun compte e-mail Firebase connecté.');
+    }
+    final credential = firebase_auth.EmailAuthProvider.credential(
+      email: email,
+      password: currentPassword,
+    );
+    await user.reauthenticateWithCredential(credential);
+    await user.updatePassword(newPassword);
   }
 
   Future<void> signOut() async {

@@ -139,6 +139,80 @@ void main() {
       expect(linked.role, 'driver');
     });
   });
+
+  group('Firebase email authentication', () {
+    test('registers a Firebase profile and keeps its requested role', () async {
+      final repo = _EmailUserRepository();
+      final service = _FakeEmailFirebaseAuthService();
+      final coordinator = AuthCoordinator(
+        firebaseAuthService: service,
+        userRepository: repo,
+      );
+      final user = await coordinator.registerEmailAccount(
+        fullName: 'New Driver',
+        email: 'NEW@example.tn',
+        password: 'Secret1234',
+        role: 'driver',
+      );
+      expect(user.firebaseUid, 'email-uid');
+      expect(user.email, 'new@example.tn');
+      expect(user.passwordHash, isEmpty);
+      expect(user.role, 'driver');
+      expect(user.isVerified, isFalse);
+    });
+
+    test('migrates legacy profile only after local password proof', () async {
+      final legacy = makeUser(role: 'admin');
+      final repo = _EmailUserRepository(legacy);
+      final service = _FakeEmailFirebaseAuthService(emailVerified: false);
+      final coordinator = AuthCoordinator(
+        firebaseAuthService: service,
+        userRepository: repo,
+      );
+      await expectLater(
+        coordinator.signInWithPassword(
+          email: legacy.email,
+          password: 'secret123',
+        ),
+        throwsA(
+          isA<AuthFlowException>().having(
+            (error) => error.error,
+            'error',
+            AuthFlowError.emailNotVerified,
+          ),
+        ),
+      );
+      expect(service.emailCreateCalls, 1);
+      expect(service.verificationSends, 0);
+      expect(repo.linkedUser?.id, legacy.id);
+      expect(repo.linkedUser?.role, 'admin');
+      expect(repo.linkedUser?.firebaseUid, 'email-uid');
+      expect(repo.linkedUser?.passwordHash, isEmpty);
+      expect(repo.linkedUser?.isVerified, isFalse);
+    });
+
+    test(
+      'does not create Firebase identity for invalid legacy password',
+      () async {
+        final legacy = makeUser(role: 'driver');
+        final repo = _EmailUserRepository(legacy);
+        final service = _FakeEmailFirebaseAuthService();
+        final coordinator = AuthCoordinator(
+          firebaseAuthService: service,
+          userRepository: repo,
+        );
+        await expectLater(
+          coordinator.signInWithPassword(
+            email: legacy.email,
+            password: 'wrong',
+          ),
+          throwsA(isA<AuthFlowException>()),
+        );
+        expect(service.emailCreateCalls, 0);
+        expect(repo.linkedUser, isNull);
+      },
+    );
+  });
 }
 
 class _FakeFirebaseAuthService extends FirebaseAuthService {
@@ -159,6 +233,15 @@ class _FakeUserRepository extends UserRepository {
 
   @override
   Future<User?> findUserByFirebaseUid(String firebaseUid) async => uidUser;
+
+  @override
+  Future<User?> syncFirebaseVerification(String firebaseUid, bool verified) async {
+    if (uidUser?.firebaseUid == firebaseUid) {
+      uidUser = uidUser!.copyWith(isVerified: verified);
+      return uidUser;
+    }
+    return null;
+  }
 
   @override
   Future<User?> findUserByEmail(String email) async {
@@ -182,4 +265,91 @@ class _FakeUserRepository extends UserRepository {
     }
     return emailUser!.copyWith(firebaseUid: firebaseUid, isVerified: true);
   }
+}
+
+class _EmailUserRepository extends UserRepository {
+  _EmailUserRepository([this.existing]);
+
+  User? existing;
+  User? linkedUser;
+
+  @override
+  Future<User?> findUserByEmail(String email) async =>
+      existing?.email.toLowerCase() == email.toLowerCase() ? existing : null;
+
+  @override
+  Future<User?> findUserByFirebaseUid(String firebaseUid) async =>
+      linkedUser?.firebaseUid == firebaseUid ? linkedUser : null;
+
+  @override
+  Future<User> registerFirebaseUser(User user) async {
+    existing = user.copyWith(id: 81);
+    return existing!;
+  }
+
+  @override
+  Future<User> linkAuthenticatedEmailAccount({
+    required int userId,
+    required String email,
+    required String firebaseUid,
+    required bool emailVerified,
+  }) async {
+    linkedUser = existing!.copyWith(
+      passwordHash: '',
+      firebaseUid: firebaseUid,
+      isVerified: emailVerified,
+    );
+    existing = linkedUser;
+    return linkedUser!;
+  }
+
+  @override
+  Future<User?> syncFirebaseVerification(
+    String firebaseUid,
+    bool verified,
+  ) async => linkedUser?.copyWith(isVerified: verified);
+}
+
+class _FakeEmailFirebaseAuthService extends FirebaseAuthService {
+  _FakeEmailFirebaseAuthService({bool emailVerified = true})
+    : identity = GoogleAuthIdentity(
+        uid: 'email-uid',
+        email: 'person@example.tn',
+        displayName: 'Person',
+        photoUrl: null,
+        emailVerified: emailVerified,
+      );
+
+  final GoogleAuthIdentity identity;
+  int emailCreateCalls = 0;
+  int verificationSends = 0;
+
+  @override
+  Future<GoogleAuthIdentity> createEmailAccount({
+    required String email,
+    required String password,
+  }) async {
+    emailCreateCalls++;
+    return identity;
+  }
+
+  @override
+  Future<GoogleAuthIdentity> signInWithEmail({
+    required String email,
+    required String password,
+  }) async => identity;
+
+  @override
+  Future<GoogleAuthIdentity?> reloadCurrentUser() async => identity;
+
+  @override
+  GoogleAuthIdentity? get currentIdentity => identity;
+
+  @override
+  Future<void> sendEmailVerification() async {
+    verificationSends++;
+  }
+
+  @override
+  Future<void> signOut() async {}
 }

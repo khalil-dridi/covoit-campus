@@ -72,23 +72,16 @@ class _SplashScreenState extends State<SplashScreen>
 
     User? restoredUser;
     try {
-      final identity = _authCoordinator.currentIdentity;
-      if (identity != null) {
-        final resolution = await _authCoordinator.resolveGoogleIdentity(
-          identity,
-        );
-        if (resolution.status == GoogleProfileStatus.authenticated) {
-          restoredUser = resolution.user;
-        } else {
-          await _authCoordinator.signOut();
-        }
+      restoredUser = await _authCoordinator.restoreSession();
+      if (_authCoordinator.currentIdentity != null && restoredUser == null) {
+        await _authCoordinator.signOut();
       }
-    } catch (error) {
-      debugPrint('Could not restore Firebase session: $error');
+    } catch (_) {
+      debugPrint('Could not restore Firebase session.');
       try {
         await _authCoordinator.signOut();
-      } catch (signOutError) {
-        debugPrint('Could not clear invalid Firebase session: $signOutError');
+      } catch (_) {
+        debugPrint('Could not clear invalid Firebase session.');
       }
     }
 
