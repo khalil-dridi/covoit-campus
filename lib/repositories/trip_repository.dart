@@ -123,23 +123,40 @@ class TripRepository {
     bool verifiedDriversOnly = false,
     double? maxPrice,
     TripSort sort = TripSort.earliest,
+    bool includeNearbyLocations = false,
   }) async {
     final db = await _databaseHelper.database;
+    final now = DateTime.now();
+    final today =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    final currentTime =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     final where = <String>[
       'trips.available_seats >= ?',
       "trips.status = 'available'",
       'drivers.is_active = 1',
+      "drivers.role = 'driver'",
+      'vehicles.user_id = trips.driver_id',
       'trips.driver_id != ?',
+      "(trips.departure_date > ? OR (trips.departure_date = ? AND trips.departure_time > ?))",
     ];
-    final whereArgs = <Object?>[seats < 1 ? 1 : seats, passengerId];
+    final whereArgs = <Object?>[
+      seats < 1 ? 1 : seats,
+      passengerId,
+      today,
+      today,
+      currentTime,
+    ];
 
     final departureFilter = departure?.trim();
-    if (departureFilter != null && departureFilter.isNotEmpty) {
+    if (!includeNearbyLocations && departureFilter != null && departureFilter.isNotEmpty) {
       where.add('trips.departure = ?');
       whereArgs.add(departureFilter);
     }
     final destinationFilter = destination?.trim();
-    if (destinationFilter != null && destinationFilter.isNotEmpty) {
+    if (!includeNearbyLocations && destinationFilter != null && destinationFilter.isNotEmpty) {
       where.add('trips.destination = ?');
       whereArgs.add(destinationFilter);
     }
@@ -168,6 +185,10 @@ class TripRepository {
         trips.id,
         trips.departure,
         trips.destination,
+        trips.departure_latitude,
+        trips.departure_longitude,
+        trips.arrival_latitude,
+        trips.arrival_longitude,
         trips.departure_date,
         trips.departure_time,
         trips.driver_id,
@@ -182,10 +203,14 @@ class TripRepository {
         trips.updated_at,
         drivers.full_name AS driver_name,
         drivers.is_verified AS driver_is_verified,
+        drivers.is_active AS driver_is_active,
+        drivers.role AS driver_role,
+        1 AS vehicle_belongs_to_driver,
         drivers.profile_image AS driver_profile_image,
         AVG(ratings.score) AS driver_rating
       FROM trips
       INNER JOIN users AS drivers ON drivers.id = trips.driver_id
+      INNER JOIN vehicles ON vehicles.id = trips.vehicle_id
       LEFT JOIN ratings ON ratings.reviewed_id = drivers.id
       WHERE ${where.join(' AND ')}
       GROUP BY trips.id

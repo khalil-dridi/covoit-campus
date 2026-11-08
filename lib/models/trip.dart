@@ -21,6 +21,9 @@ class Trip {
   final int pendingRequests;
   final String driverName;
   final bool driverIsVerified;
+  final bool driverIsActive;
+  final String driverRole;
+  final bool vehicleBelongsToDriver;
   final String? driverProfileImage;
   final double? driverRating;
 
@@ -47,6 +50,9 @@ class Trip {
     this.pendingRequests = 0,
     this.driverName = '',
     this.driverIsVerified = false,
+    this.driverIsActive = true,
+    this.driverRole = 'driver',
+    this.vehicleBelongsToDriver = true,
     this.driverProfileImage,
     this.driverRating,
   });
@@ -77,6 +83,12 @@ class Trip {
       pendingRequests: (map['pending_requests'] as int? ?? 0),
       driverName: map['driver_name'] as String? ?? '',
       driverIsVerified: map['driver_is_verified'] == 1,
+      driverIsActive:
+          map['driver_is_active'] == null || map['driver_is_active'] == 1,
+      driverRole: map['driver_role'] as String? ?? 'driver',
+      vehicleBelongsToDriver:
+          map['vehicle_belongs_to_driver'] == null ||
+          map['vehicle_belongs_to_driver'] == 1,
       driverProfileImage: map['driver_profile_image'] as String?,
       driverRating: rating == null ? null : (rating as num).toDouble(),
     );

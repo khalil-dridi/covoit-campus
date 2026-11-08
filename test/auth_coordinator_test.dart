@@ -143,7 +143,7 @@ void main() {
   group('Firebase email authentication', () {
     test('registers a Firebase profile and keeps its requested role', () async {
       final repo = _EmailUserRepository();
-      final service = _FakeEmailFirebaseAuthService();
+      final service = _FakeEmailFirebaseAuthService(emailVerified: false);
       final coordinator = AuthCoordinator(
         firebaseAuthService: service,
         userRepository: repo,
@@ -346,7 +346,7 @@ class _FakeEmailFirebaseAuthService extends FirebaseAuthService {
   GoogleAuthIdentity? get currentIdentity => identity;
 
   @override
-  Future<void> sendEmailVerification() async {
+  Future<void> sendEmailVerification({required String expectedUid}) async {
     verificationSends++;
   }
 

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../models/trip.dart';
 import '../../../models/user.dart';
 import '../../../models/user_profile_context.dart';
 import '../../../repositories/trip_repository.dart';
+import '../../../services/trip_matching_service.dart';
+import '../../driver/publish/location_picker_screen.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 import '../trips/trip_details_screen.dart';
 import '../../../widgets/passenger/passenger_header.dart';
@@ -27,25 +30,15 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
   static const Color background = Color(0xFFF4FFFB);
   static const Color textGrey = Color(0xFF547080);
 
-  static const List<String> _cities = [
-    'Tunis',
-    'Ariana',
-    'Manouba',
-    'Ben Arous',
-    'La Marsa',
-    'Nabeul',
-    'Sousse',
-    'Monastir',
-    'Bizerte',
-    'Béja',
-    'Medjez El Bab',
-  ];
-
   final TripRepository _tripRepository = TripRepository();
+  final TripMatchingService _tripMatchingService = TripMatchingService();
   final GlobalKey _criteriaKey = GlobalKey();
 
   String? _departure;
   String? _destination;
+  LatLng? _departurePoint;
+  LatLng? _destinationPoint;
+  bool _isResolvingLocation = false;
   DateTime? _date;
   TimeOfDay? _time;
   int _seats = 1;
@@ -55,7 +48,7 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
   bool _flexibleTime = false;
   double? _maxPrice;
   TripSort _sort = TripSort.earliest;
-  List<Trip> _results = const [];
+  List<TripMatch> _results = const [];
   String? _errorMessage;
 
   @override
@@ -197,6 +190,15 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
                         ),
                       ),
                     ),
+                    if (_isResolvingLocation) ...[
+                      const SizedBox(height: 10),
+                      const LinearProgressIndicator(minHeight: 2),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Sélection de l’emplacement…',
+                        style: TextStyle(color: textGrey, fontSize: 11),
+                      ),
+                    ],
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 10),
                       _buildInlineError(_errorMessage!),
@@ -206,7 +208,9 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton.icon(
-                        onPressed: _isSearching ? null : _searchTrips,
+                        onPressed: _isSearching || _isResolvingLocation
+                            ? null
+                            : _searchTrips,
                         icon: _isSearching
                             ? const SizedBox(
                                 width: 18,
@@ -398,12 +402,12 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
         else ...[
           _buildResultControls(),
           const SizedBox(height: 10),
-          ..._results.map((trip) => Padding(
+          ..._results.map((match) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _TripResultCard(
-                  trip: trip,
+                  match: match,
                   currentUser: widget.user,
-                  onDetails: () => _openTripDetails(trip),
+                  onDetails: () => _openTripDetails(match.trip),
                 ),
               )),
         ],
@@ -473,43 +477,52 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
       );
 
   Future<void> _selectCity({required bool isDeparture}) async {
-    final current = isDeparture ? _departure : _destination;
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) => _CityPickerSheet(
-        cities: _cities,
-        selectedCity: current,
-        title: isDeparture ? 'Ville de départ' : 'Ville d’arrivée',
-      ),
-    );
+    if (_isResolvingLocation) return;
+    setState(() => _isResolvingLocation = true);
+    LocationSelection? selection;
+    try {
+      selection = await Navigator.of(context).push<LocationSelection>(
+        MaterialPageRoute(
+          builder: (_) => LocationPickerScreen(
+            title: isDeparture ? 'Ville de départ' : 'Ville d’arrivée',
+            initialPoint: isDeparture ? _departurePoint : _destinationPoint,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isResolvingLocation = false);
+    }
 
-    if (!mounted || selected == null) return;
-    if ((isDeparture && selected == _destination) ||
-        (!isDeparture && selected == _departure)) {
+    if (!mounted || selection == null) return;
+    if ((isDeparture && selection.label == _destination) ||
+        (!isDeparture && selection.label == _departure)) {
       setState(() {
         _errorMessage =
             'Les villes de départ et d’arrivée doivent être différentes.';
       });
       return;
     }
-
     setState(() {
       if (isDeparture) {
-        _departure = selected;
+        _departure = selection!.label;
+        _departurePoint = selection.point;
       } else {
-        _destination = selected;
+        _destination = selection!.label;
+        _destinationPoint = selection.point;
       }
       _errorMessage = null;
     });
   }
 
   void _swapLocations() {
+    if (_isResolvingLocation) return;
     setState(() {
       final previousDeparture = _departure;
+      final previousPoint = _departurePoint;
       _departure = _destination;
+      _departurePoint = _destinationPoint;
       _destination = previousDeparture;
+      _destinationPoint = previousPoint;
       _errorMessage = null;
     });
   }
@@ -585,6 +598,7 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
   }
 
   Future<void> _searchTrips() async {
+    if (_isResolvingLocation) return;
     if (!_hasSearchCriteria) {
       setState(() {
         _results = const [];
@@ -600,6 +614,19 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
     });
 
     try {
+      final useGeographicMatching = _departure != null && _destination != null;
+      if (useGeographicMatching &&
+          (_departurePoint == null || _destinationPoint == null)) {
+        if (!mounted) return;
+        setState(() {
+          _isSearching = false;
+          _hasSearched = true;
+          _results = const [];
+          _errorMessage =
+              'Les coordonnées des deux villes sont nécessaires pour la recherche géographique.';
+        });
+        return;
+      }
       final trips = await _tripRepository.searchAvailableTrips(
         passengerId: widget.user.id ?? -1,
         departure: _departure,
@@ -611,10 +638,33 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
         verifiedDriversOnly: _verifiedDriversOnly,
         maxPrice: _maxPrice,
         sort: _sort,
+        includeNearbyLocations: useGeographicMatching,
       );
       if (!mounted) return;
+      final matches = useGeographicMatching
+          ? _tripMatchingService.matchTrips(
+              candidates: trips,
+              requestedDeparture: _departurePoint,
+              requestedDestination: _destinationPoint,
+              passengerId: widget.user.id ?? -1,
+              seats: _seats,
+              now: DateTime.now(),
+              departureDate: _date == null ? null : _formatIsoDate(_date!),
+              departureTime: _time == null ? null : _formatTime(_time!),
+              flexibleTime: _flexibleTime,
+              tieBreakSort: _sort.name,
+            )
+          : trips
+              .map((trip) => TripMatch(
+                    trip: trip,
+                    type: TripMatchType.unranked,
+                    departureDistanceKm: null,
+                    destinationDistanceKm: null,
+                    relevanceScore: null,
+                  ))
+              .toList(growable: false);
       setState(() {
-        _results = trips;
+        _results = matches;
         _hasSearched = true;
         _isSearching = false;
       });
@@ -781,91 +831,6 @@ class _SeatButton extends StatelessWidget {
   }
 }
 
-class _CityPickerSheet extends StatelessWidget {
-  final List<String> cities;
-  final String? selectedCity;
-  final String title;
-
-  const _CityPickerSheet({
-    required this.cities,
-    required this.selectedCity,
-    required this.title,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.72),
-        padding: const EdgeInsets.fromLTRB(20, 13, 20, 16),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 38,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD8E4DF),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(height: 17),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: PassengerSearchScreenStateColors.primaryBlue,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: cities.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final city = cities[index];
-                  final selected = city == selectedCity;
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    leading: Icon(
-                      Icons.location_on_outlined,
-                      color: selected
-                          ? PassengerSearchScreenStateColors.green
-                          : PassengerSearchScreenStateColors.secondaryBlue,
-                    ),
-                    title: Text(
-                      city,
-                      style: const TextStyle(
-                        color: PassengerSearchScreenStateColors.primaryBlue,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    trailing: selected
-                        ? const Icon(Icons.check_circle_rounded,
-                            color: PassengerSearchScreenStateColors.green)
-                        : null,
-                    onTap: () => Navigator.of(context).pop(city),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _FilterSelection {
   final double? maxPrice;
   final bool verifiedOnly;
@@ -1009,11 +974,12 @@ class _FilterSheetState extends State<_FilterSheet> {
 }
 
 class _TripResultCard extends StatelessWidget {
-  final Trip trip;
+  final TripMatch match;
+  Trip get trip => match.trip;
   final User currentUser;
   final VoidCallback onDetails;
 
-  const _TripResultCard({required this.trip, required this.currentUser, required this.onDetails});
+  const _TripResultCard({required this.match, required this.currentUser, required this.onDetails});
 
   @override
   Widget build(BuildContext context) {
@@ -1033,135 +999,172 @@ class _TripResultCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 46,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: PassengerSearchScreenStateColors.lightBlue,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  date == null ? '--' : '${date.day}',
-                  style: const TextStyle(
-                    color: PassengerSearchScreenStateColors.primaryBlue,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 46,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: PassengerSearchScreenStateColors.lightBlue,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                Text(
-                  month,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: PassengerSearchScreenStateColors.secondaryBlue,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  trip.departure,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: PassengerSearchScreenStateColors.primaryBlue,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Row(
+                child: Column(
                   children: [
-                    Container(width: 1, height: 12, color: PassengerSearchScreenStateColors.green),
-                    const SizedBox(width: 5),
                     Text(
-                      trip.destination,
+                      date == null ? '--' : '${date.day}',
+                      style: const TextStyle(
+                        color: PassengerSearchScreenStateColors.primaryBlue,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      month,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: PassengerSearchScreenStateColors.primaryBlue,
-                        fontSize: 12,
+                        color: PassengerSearchScreenStateColors.secondaryBlue,
+                        fontSize: 9,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                UserProfileTarget(
-                  userId: trip.driverId,
-                  currentUser: currentUser,
-                  profileContext: UserProfileContext(
-                    type: UserProfileContextType.trip,
-                    tripId: trip.id,
-                    departure: trip.departure,
-                    destination: trip.destination,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Row(
-                    children: [
-                    _DriverAvatar(image: trip.driverProfileImage),
-                    const SizedBox(width: 7),
-                    Flexible(
-                      child: Text(
-                        trip.driverName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: PassengerSearchScreenStateColors.textGrey,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (match.type != TripMatchType.unranked) _matchBadge(),
+                    Text(
+                      trip.departureTime,
+                      style: const TextStyle(
+                        color: PassengerSearchScreenStateColors.primaryBlue,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if (trip.driverIsVerified) ...[
-                      const SizedBox(width: 4),
-                      const Icon(Icons.verified_rounded,
-                          color: PassengerSearchScreenStateColors.green, size: 14),
-                    ],
-                    if (trip.driverRating != null) ...[
-                      const SizedBox(width: 7),
-                      const Icon(Icons.star_rounded,
-                          color: Color(0xFFE7AD34), size: 14),
-                      Text(
-                        trip.driverRating!.toStringAsFixed(1),
-                        style: const TextStyle(
-                          color: PassengerSearchScreenStateColors.textGrey,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _routePoint(
+            icon: Icons.trip_origin_rounded,
+            label: 'Départ',
+            place: trip.departure,
+            color: PassengerSearchScreenStateColors.primaryBlue,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Container(
+              width: 2,
+              height: 12,
+              color: PassengerSearchScreenStateColors.green.withValues(alpha: 0.55),
+            ),
+          ),
+          _routePoint(
+            icon: Icons.location_on_rounded,
+            label: 'Arrivée',
+            place: trip.destination,
+            color: PassengerSearchScreenStateColors.green,
+          ),
+          if (match.type == TripMatchType.nearby) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F8F7),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _distanceMetric('Départ', match.departureDistanceKm!),
+                  _distanceMetric('Arrivée', match.destinationDistanceKm!),
+                  Text(
+                    'Score ${match.relevanceScore!.toStringAsFixed(0)}/100',
+                    style: const TextStyle(
+                      color: PassengerSearchScreenStateColors.textGrey,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Text(
+                    'Distances à vol d’oiseau',
+                    style: TextStyle(
+                      color: PassengerSearchScreenStateColors.textGrey,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          UserProfileTarget(
+            userId: trip.driverId,
+            currentUser: currentUser,
+            profileContext: UserProfileContext(
+              type: UserProfileContextType.trip,
+              tripId: trip.id,
+              departure: trip.departure,
+              destination: trip.destination,
+            ),
+            borderRadius: BorderRadius.circular(10),
+            child: Row(
+              children: [
+                _DriverAvatar(image: trip.driverProfileImage),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    trip.driverName,
+                    softWrap: true,
+                    style: const TextStyle(
+                      color: PassengerSearchScreenStateColors.textGrey,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
+                if (trip.driverIsVerified) ...[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.verified_rounded,
+                      color: PassengerSearchScreenStateColors.green, size: 14),
+                ],
+                if (trip.driverRating != null) ...[
+                  const SizedBox(width: 7),
+                  const Icon(Icons.star_rounded,
+                      color: Color(0xFFE7AD34), size: 14),
+                  Text(
+                    trip.driverRating!.toStringAsFixed(1),
+                    style: const TextStyle(
+                      color: PassengerSearchScreenStateColors.textGrey,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-          const SizedBox(width: 7),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                trip.departureTime,
-                style: const TextStyle(
-                  color: PassengerSearchScreenStateColors.primaryBlue,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 5),
               Text(
                 '${trip.price.toStringAsFixed(2)} DT',
                 style: const TextStyle(
@@ -1170,12 +1173,11 @@ class _TripResultCard extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 4),
               Text(
                 '${trip.availableSeats} places',
                 style: const TextStyle(
                   color: PassengerSearchScreenStateColors.textGrey,
-                  fontSize: 9,
+                  fontSize: 10,
                 ),
               ),
               TextButton.icon(
@@ -1193,6 +1195,84 @@ class _TripResultCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _routePoint({
+    required IconData icon,
+    required String label,
+    required String place,
+    required Color color,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: PassengerSearchScreenStateColors.textGrey,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                place,
+                softWrap: true,
+                style: TextStyle(
+                  color: PassengerSearchScreenStateColors.primaryBlue,
+                  fontSize: label == 'Départ' ? 13 : 12,
+                  fontWeight: label == 'Départ' ? FontWeight.w800 : FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _distanceMetric(String label, double distanceKm) {
+    return Text(
+      '$label ${distanceKm.toStringAsFixed(1)} km',
+      style: const TextStyle(
+        color: PassengerSearchScreenStateColors.textGrey,
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+
+  Widget _matchBadge() {
+    final exact = match.type == TripMatchType.exact;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: exact
+            ? PassengerSearchScreenStateColors.lightBlue
+            : const Color(0xFFE8F7F0),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        child: Text(
+          exact ? 'Correspondance exacte' : 'Correspondance proche',
+          style: TextStyle(
+            color: exact
+                ? PassengerSearchScreenStateColors.primaryBlue
+                : PassengerSearchScreenStateColors.green,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
