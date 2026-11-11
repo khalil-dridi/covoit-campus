@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../models/trip_details.dart';
 import '../../../models/user.dart';
 import '../../../repositories/trip_repository.dart';
+import '../../../services/geo_matching_service.dart';
+import '../../../services/location_service.dart';
 import '../bookings/driver_trip_bookings_screen.dart';
 
 class DriverTripDetailsScreen extends StatefulWidget {
@@ -32,10 +35,13 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
   static const Color lightGreen = Color(0xFFE8F8F1);
 
   final TripRepository _repository = TripRepository();
+  final LocationService _locationService = LocationService();
+  static const GeoMatchingService _geoMatchingService = GeoMatchingService();
   TripDetails? _trip;
   bool _loading = true;
   bool _loadFailed = false;
   bool _cancelling = false;
+  bool _starting = false;
 
   @override
   void initState() {
@@ -116,9 +122,12 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
               ),
             ),
             const SizedBox(width: 14),
-            const Text(
-              'Détails du trajet',
-              style: TextStyle(color: primaryBlue, fontSize: 19, fontWeight: FontWeight.w800),
+            const Expanded(
+              child: Text(
+                'Détails du trajet',
+                maxLines: 2,
+                style: TextStyle(color: primaryBlue, fontSize: 19, fontWeight: FontWeight.w800),
+              ),
             ),
           ],
         ),
@@ -199,6 +208,28 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
               ),
             ),
             const SizedBox(height: 22),
+            if (trip.status == 'available') ...[
+              SizedBox(
+                width: double.infinity,
+                height: 49,
+                child: ElevatedButton.icon(
+                  onPressed: _starting ? null : () => _startTrip(trip),
+                  icon: _starting
+                      ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.play_arrow_rounded, size: 20),
+                  label: const Text('Commencer le trajet'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: green,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFFD4DAD7),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             SizedBox(
               width: double.infinity,
               height: 49,
@@ -239,6 +270,79 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
         ),
       );
 
+  Future<void> _startTrip(TripDetails trip) async {
+    final driverId = widget.user.id;
+    if (_starting || trip.status != 'available' || driverId == null) return;
+    final departureLatitude = trip.departureLatitude;
+    final departureLongitude = trip.departureLongitude;
+    if (departureLatitude == null || departureLongitude == null) {
+      _showMessage('Les coordonnées du départ sont indisponibles.');
+      return;
+    }
+
+    setState(() => _starting = true);
+    try {
+      final current = await _locationService.getCurrentLocation();
+      final departure = LatLng(departureLatitude, departureLongitude);
+      debugPrint(
+        '[TripStartGPS] driver latitude=${current.latitude}, '
+        'longitude=${current.longitude}',
+      );
+      debugPrint(
+        '[TripStartGPS] departure latitude=${departure.latitude}, '
+        'longitude=${departure.longitude}',
+      );
+      final distanceKm = _geoMatchingService.distanceKm(current, departure);
+      if (distanceKm == null) {
+        _showMessage('Impossible de vérifier la distance jusqu’au départ.');
+        return;
+      }
+      final distanceMeters = distanceKm * 1000;
+      final swappedDriverDistanceKm = _geoMatchingService.distanceKm(
+        LatLng(current.longitude, current.latitude),
+        departure,
+      );
+      final swappedDepartureDistanceKm = _geoMatchingService.distanceKm(
+        current,
+        LatLng(departure.longitude, departure.latitude),
+      );
+      debugPrint(
+        '[TripStartGPS] distance=${distanceMeters.toStringAsFixed(2)} m '
+        '(${distanceKm.toStringAsFixed(5)} km); '
+        'if driver coords swapped=${swappedDriverDistanceKm?.toStringAsFixed(5)} km; '
+        'if departure coords swapped=${swappedDepartureDistanceKm?.toStringAsFixed(5)} km',
+      );
+      if (!_geoMatchingService.isWithinTripValidationDistanceKm(distanceKm)) {
+        _showMessage(
+          'Vous êtes à ${(distanceMeters / 1000).toStringAsFixed(2)} km du départ. '
+          'Vous devez être à 2 km maximum pour commencer le trajet.',
+        );
+        return;
+      }
+
+      final updated = await _repository.startTrip(
+        tripId: trip.id,
+        driverId: driverId,
+        latitude: current.latitude,
+        longitude: current.longitude,
+        startedAt: DateTime.now(),
+      );
+      if (!mounted) return;
+      if (updated != 1) {
+        _showMessage('Ce trajet a déjà été commencé ou ne vous appartient pas.');
+        return;
+      }
+      await _loadTrip();
+      if (mounted) _showMessage('Trajet commencé.');
+    } on LocationException catch (error) {
+      _showMessage(error.message);
+    } catch (_) {
+      _showMessage('Impossible de commencer le trajet. Réessayez.');
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
+  }
+
   Widget _summaryCard(TripDetails trip) {
     final date = DateTime.tryParse(trip.departureDate);
     final dateLabel = date == null
@@ -247,6 +351,8 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
     final booked = (trip.totalSeats - trip.availableSeats).clamp(0, trip.totalSeats);
     final status = trip.status == 'cancelled'
         ? 'Annulé'
+        : trip.status == 'in_progress'
+            ? 'En cours'
         : trip.availableSeats <= 0
             ? 'Complet'
             : trip.status == 'available'
@@ -310,7 +416,14 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
           Icon(icon, color: green, size: 17),
           const SizedBox(width: 8),
           Expanded(child: Text(label, style: const TextStyle(color: textGrey, fontSize: 11, fontWeight: FontWeight.w600))),
-          Text(value, style: const TextStyle(color: primaryBlue, fontSize: 12, fontWeight: FontWeight.w800)),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              softWrap: true,
+              style: const TextStyle(color: primaryBlue, fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
         ],
       );
 

@@ -892,6 +892,12 @@ class DriverPublishTripScreenState extends State<DriverPublishTripScreen> {
 
     setState(() => _isPublishing = true);
     try {
+      debugPrint(
+        '[TripPublishGPS] departure latitude=${_departurePoint!.latitude}, '
+        'longitude=${_departurePoint!.longitude}; '
+        'arrival latitude=${_arrivalPoint!.latitude}, '
+        'longitude=${_arrivalPoint!.longitude}',
+      );
       final tripId = await _tripRepository.createTrip(
         Trip(
           driverId: widget.user.id!,

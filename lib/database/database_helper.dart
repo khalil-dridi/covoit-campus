@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
 
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -122,6 +122,9 @@ class DatabaseHelper {
         departure_longitude REAL,
         arrival_latitude REAL,
         arrival_longitude REAL,
+        start_latitude REAL,
+        start_longitude REAL,
+        actual_start_time TEXT,
         departure_date TEXT NOT NULL,
         departure_time TEXT NOT NULL,
         total_seats INTEGER NOT NULL,
@@ -362,6 +365,26 @@ class DatabaseHelper {
 
     if (oldVersion < 7) {
       await migrateUsersForFirebase(db);
+    }
+
+    if (oldVersion < 8) {
+      await migrateTripStartFields(db);
+    }
+  }
+
+  static Future<void> migrateTripStartFields(DatabaseExecutor db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(trips)');
+    final existing = columns.map((column) => column['name']).toSet();
+    for (final column in const {
+      'start_latitude': 'REAL',
+      'start_longitude': 'REAL',
+      'actual_start_time': 'TEXT',
+    }.entries) {
+      if (!existing.contains(column.key)) {
+        await db.execute(
+          'ALTER TABLE trips ADD COLUMN ${column.key} ${column.value}',
+        );
+      }
     }
   }
 

@@ -7,6 +7,7 @@ class GeoMatchingService {
   const GeoMatchingService();
 
   static const double _earthRadiusKm = 6371.0088;
+  static const double maximumTripValidationDistanceMeters = 2000;
 
   /// Returns null for missing or invalid coordinates.
   double? distanceKm(LatLng? first, LatLng? second) {
@@ -22,6 +23,11 @@ class GeoMatchingService {
     final bounded = haversine.clamp(0.0, 1.0).toDouble();
     return 2 * _earthRadiusKm * math.asin(math.sqrt(bounded));
   }
+
+  bool isWithinTripValidationDistanceKm(double distanceKm) =>
+      distanceKm.isFinite &&
+      distanceKm >= 0 &&
+      distanceKm * 1000 <= maximumTripValidationDistanceMeters;
 
   bool _isValid(LatLng? point) =>
       point != null &&

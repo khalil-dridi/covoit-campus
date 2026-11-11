@@ -28,6 +28,24 @@ void main() {
     expect(distance, lessThan(120));
   });
 
+  test('nearby Tunis coordinates produce a distance of about three km', () {
+    final distance = service.distanceKm(
+      const LatLng(36.8065, 10.1815),
+      const LatLng(36.8335, 10.1815),
+    );
+
+    expect(distance, isNotNull);
+    expect(distance!, greaterThan(2.9));
+    expect(distance, lessThan(3.1));
+  });
+
+  test('trip validation radius is 2 km and includes its boundary', () {
+    expect(GeoMatchingService.maximumTripValidationDistanceMeters, 2000);
+    expect(service.isWithinTripValidationDistanceKm(1.999), isTrue);
+    expect(service.isWithinTripValidationDistanceKm(2), isTrue);
+    expect(service.isWithinTripValidationDistanceKm(2.001), isFalse);
+  });
+
   test('missing and invalid coordinates do not produce distances', () {
     expect(service.distanceKm(null, const LatLng(36.8, 10.1)), isNull);
     expect(

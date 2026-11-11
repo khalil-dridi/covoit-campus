@@ -9,6 +9,8 @@ import '../../../models/user.dart';
 import '../../../models/vehicle.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../../repositories/vehicle_repository.dart';
+import '../../../services/geo_matching_service.dart';
+import '../../../services/location_service.dart';
 import '../../../widgets/driver/driver_header.dart';
 import 'driver_trip_details_screen.dart';
 import '../publish/location_picker_screen.dart';
@@ -38,6 +40,8 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
 
   final TripRepository _tripRepository = TripRepository();
   final VehicleRepository _vehicleRepository = VehicleRepository();
+  final LocationService _locationService = LocationService();
+  static const GeoMatchingService _geoMatchingService = GeoMatchingService();
   final Map<int, Vehicle> _vehicles = {};
 
   DriverTripsFilter _filter = DriverTripsFilter.upcoming;
@@ -83,10 +87,14 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
             vehicles.map((vehicle) => MapEntry(vehicle.id!, vehicle)),
           );
         _upcomingTrips = trips
-            .where((trip) => trip.status == 'available' && _isDateTimeFuture(trip))
+            .where((trip) => trip.status == 'in_progress' || (trip.status == 'available' && _isDateTimeFuture(trip)))
             .toList();
         _pastTrips = trips
-            .where((trip) => trip.status == 'available' && _isDateTimePast(trip))
+            .where(
+              (trip) =>
+                  trip.status == 'completed' ||
+                  (trip.status == 'available' && _isDateTimePast(trip)),
+            )
             .toList();
         _cancelledTrips = trips
             .where((trip) => trip.status == 'cancelled')
@@ -316,6 +324,9 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
           onDetails: () => _openTripDetails(items[index]),
           onEdit: () => _editTrip(items[index]),
           onCancel: () => _cancelTrip(items[index]),
+          onComplete: _filter == DriverTripsFilter.upcoming
+              ? () => _completeTrip(items[index])
+              : null,
         ),
       ),
     );
@@ -402,6 +413,91 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
     }
   }
 
+  Future<void> _completeTrip(Trip trip) async {
+    final tripId = trip.id;
+    final driverId = widget.user.id;
+    if (tripId == null || driverId == null || trip.status != 'available') {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => _CustomDialog(
+        icon: Icons.check_circle_outline_rounded,
+        title: 'Terminer ce trajet ?',
+        message:
+            'Cette action marquera le trajet comme terminé et ne pourra pas être annulée.',
+        cancelLabel: 'Retour',
+        confirmLabel: 'Terminer le trajet',
+        onCancel: () => Navigator.of(dialogContext).pop(false),
+        onConfirm: () => Navigator.of(dialogContext).pop(true),
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+
+    final arrivalLatitude = trip.arrivalLatitude;
+    final arrivalLongitude = trip.arrivalLongitude;
+    if (arrivalLatitude == null || arrivalLongitude == null) {
+      _showInfoDialog(
+        title: 'Destination indisponible',
+        message: 'Les coordonnées GPS de la destination sont indisponibles.',
+        icon: Icons.location_off_outlined,
+      );
+      return;
+    }
+
+    try {
+      final current = await _locationService.getCurrentLocation();
+      final distanceKm = _geoMatchingService.distanceKm(
+        current,
+        LatLng(arrivalLatitude, arrivalLongitude),
+      );
+      if (distanceKm == null) {
+        _showInfoDialog(
+          title: 'Position indisponible',
+          message: 'Impossible de vérifier la distance jusqu’à la destination.',
+          icon: Icons.location_off_outlined,
+        );
+        return;
+      }
+
+      if (!_geoMatchingService.isWithinTripValidationDistanceKm(distanceKm)) {
+        _showInfoDialog(
+          title: 'Vous êtes trop loin',
+          message:
+              'Vous êtes à ${distanceKm.toStringAsFixed(2)} km de la destination. '
+              'Vous devez être à 2 km maximum pour terminer le trajet.',
+          icon: Icons.location_off_outlined,
+        );
+        return;
+      }
+
+      final updated = await _tripRepository.completeTrip(
+        tripId: tripId,
+        driverId: driverId,
+      );
+      if (updated != 1) {
+        throw StateError(
+          'Le trajet n’est plus disponible ou ne vous appartient pas.',
+        );
+      }
+      await _loadTrips();
+    } on LocationException catch (error) {
+      _showInfoDialog(
+        title: 'Position indisponible',
+        message: error.message,
+        icon: Icons.location_off_outlined,
+      );
+    } catch (_) {
+      _showInfoDialog(
+        title: 'Action impossible',
+        message:
+            'Impossible de terminer ce trajet. Il a peut-être déjà été modifié.',
+        icon: Icons.error_outline_rounded,
+      );
+    }
+  }
+
   void _showInfoDialog({
     required String title,
     required String message,
@@ -453,6 +549,7 @@ class _TripCard extends StatelessWidget {
     required this.onDetails,
     required this.onEdit,
     required this.onCancel,
+    required this.onComplete,
   });
 
   final Trip trip;
@@ -460,6 +557,7 @@ class _TripCard extends StatelessWidget {
   final VoidCallback onDetails;
   final VoidCallback onEdit;
   final VoidCallback onCancel;
+  final VoidCallback? onComplete;
 
   static const Color primaryBlue = Color(0xFF123D68);
   static const Color secondaryBlue = Color(0xFF1E5AA8);
@@ -470,7 +568,13 @@ class _TripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bookingSummary = _bookingSummary();
-    final statusLabel = trip.status == 'cancelled' ? 'Annulé' : trip.status == 'available' ? 'Disponible' : trip.status;
+    final statusLabel = trip.status == 'cancelled'
+        ? 'Annulé'
+        : trip.status == 'available'
+            ? 'Disponible'
+            : trip.status == 'in_progress'
+                ? 'En cours'
+                : trip.status;
 
     return Container(
       width: double.infinity,
@@ -594,12 +698,15 @@ class _TripCard extends StatelessWidget {
                     children: [
                       const Icon(Icons.event_seat_rounded, color: green, size: 16),
                       const SizedBox(width: 5),
-                      Text(
-                        bookingSummary,
-                        style: const TextStyle(
-                          color: primaryBlue,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                      Flexible(
+                        child: Text(
+                          bookingSummary,
+                          softWrap: true,
+                          style: const TextStyle(
+                            color: primaryBlue,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
@@ -638,6 +745,12 @@ class _TripCard extends StatelessWidget {
                   onPressed: onCancel,
                   danger: true,
                 ),
+                if (onComplete != null)
+                  _ActionButton(
+                    label: 'Terminer',
+                    icon: Icons.check_circle_outline_rounded,
+                    onPressed: onComplete!,
+                  ),
               ],
             ),
           ],

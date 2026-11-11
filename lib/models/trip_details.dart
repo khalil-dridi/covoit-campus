@@ -3,6 +3,8 @@ class TripDetails {
   final int driverId;
   final String departure;
   final String destination;
+  final double? departureLatitude;
+  final double? departureLongitude;
   final String departureDate;
   final String departureTime;
   final int totalSeats;
@@ -27,6 +29,8 @@ class TripDetails {
     required this.driverId,
     required this.departure,
     required this.destination,
+    this.departureLatitude,
+    this.departureLongitude,
     required this.departureDate,
     required this.departureTime,
     required this.totalSeats,
@@ -54,6 +58,8 @@ class TripDetails {
       driverId: map['driver_id'] as int,
       departure: map['departure'] as String,
       destination: map['destination'] as String,
+      departureLatitude: (map['departure_latitude'] as num?)?.toDouble(),
+      departureLongitude: (map['departure_longitude'] as num?)?.toDouble(),
       departureDate: map['departure_date'] as String,
       departureTime: map['departure_time'] as String,
       totalSeats: map['total_seats'] as int,
