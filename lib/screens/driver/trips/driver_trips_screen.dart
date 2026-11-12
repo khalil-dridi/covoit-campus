@@ -9,23 +9,48 @@ import '../../../models/user.dart';
 import '../../../models/vehicle.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../../repositories/vehicle_repository.dart';
-import '../../../services/geo_matching_service.dart';
-import '../../../services/location_service.dart';
 import '../../../widgets/driver/driver_header.dart';
 import 'driver_trip_details_screen.dart';
 import '../publish/location_picker_screen.dart';
 
 enum DriverTripsFilter { upcoming, past, cancelled }
 
+enum DriverTripsSort {
+  tripNewest,
+  tripOldest,
+  publishedNewest,
+  publishedOldest,
+}
+
+List<Trip> sortDriverTrips(List<Trip> trips, DriverTripsSort sort) {
+  final ordered = List<Trip>.of(trips);
+  final ascending =
+      sort == DriverTripsSort.tripOldest ||
+      sort == DriverTripsSort.publishedOldest;
+  final byPublication =
+      sort == DriverTripsSort.publishedNewest ||
+      sort == DriverTripsSort.publishedOldest;
+  ordered.sort((a, b) {
+    final aDate = byPublication
+        ? DateTime.tryParse(a.createdAt)
+        : _tripDepartureDateTime(a);
+    final bDate = byPublication
+        ? DateTime.tryParse(b.createdAt)
+        : _tripDepartureDateTime(b);
+    final comparison = (aDate ?? DateTime(0)).compareTo(bDate ?? DateTime(0));
+    return ascending ? comparison : -comparison;
+  });
+  return ordered;
+}
+
+DateTime? _tripDepartureDateTime(Trip trip) =>
+    DateTime.tryParse('${trip.departureDate}T${trip.departureTime}');
+
 class DriverTripsScreen extends StatefulWidget {
   final User user;
   final VoidCallback? onPublishTap;
 
-  const DriverTripsScreen({
-    super.key,
-    required this.user,
-    this.onPublishTap,
-  });
+  const DriverTripsScreen({super.key, required this.user, this.onPublishTap});
 
   @override
   State<DriverTripsScreen> createState() => DriverTripsScreenState();
@@ -40,11 +65,10 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
 
   final TripRepository _tripRepository = TripRepository();
   final VehicleRepository _vehicleRepository = VehicleRepository();
-  final LocationService _locationService = LocationService();
-  static const GeoMatchingService _geoMatchingService = GeoMatchingService();
   final Map<int, Vehicle> _vehicles = {};
 
   DriverTripsFilter _filter = DriverTripsFilter.upcoming;
+  DriverTripsSort _sort = DriverTripsSort.tripNewest;
   bool _isLoading = true;
   String? _errorMessage;
   List<Trip> _upcomingTrips = const [];
@@ -87,7 +111,11 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
             vehicles.map((vehicle) => MapEntry(vehicle.id!, vehicle)),
           );
         _upcomingTrips = trips
-            .where((trip) => trip.status == 'in_progress' || (trip.status == 'available' && _isDateTimeFuture(trip)))
+            .where(
+              (trip) =>
+                  trip.status == 'in_progress' ||
+                  (trip.status == 'available' && _isDateTimeFuture(trip)),
+            )
             .toList();
         _pastTrips = trips
             .where(
@@ -133,10 +161,7 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      DriverHeader(
-                        user: widget.user,
-                        compact: true,
-                      ),
+                      DriverHeader(user: widget.user, compact: true),
                       const SizedBox(height: 20),
                       const Text(
                         'Mes trajets',
@@ -159,12 +184,13 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
                       _buildStatsRow(),
                       const SizedBox(height: 18),
                       _buildFilterTabs(),
+                      const SizedBox(height: 12),
+                      _buildSortSelector(),
                     ],
                   ),
                 ),
               ),
-              if (_isLoading)
-                const SliverToBoxAdapter(child: _LoadingState()),
+              if (_isLoading) const SliverToBoxAdapter(child: _LoadingState()),
               if (!_isLoading && _errorMessage != null)
                 SliverToBoxAdapter(child: _ErrorState(_errorMessage!)),
               if (!_isLoading && _errorMessage == null)
@@ -181,8 +207,14 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
 
   Widget _buildStatsRow() {
     final upcoming = _upcomingTrips.length;
-    final totalSeats = _upcomingTrips.fold<int>(0, (sum, trip) => sum + trip.totalSeats);
-    final availableSeats = _upcomingTrips.fold<int>(0, (sum, trip) => sum + trip.availableSeats);
+    final totalSeats = _upcomingTrips.fold<int>(
+      0,
+      (sum, trip) => sum + trip.totalSeats,
+    );
+    final availableSeats = _upcomingTrips.fold<int>(
+      0,
+      (sum, trip) => sum + trip.availableSeats,
+    );
 
     return Row(
       children: [
@@ -190,127 +222,190 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
         const SizedBox(width: 9),
         Expanded(child: _statCard('Places partagées', totalSeats.toString())),
         const SizedBox(width: 9),
-        Expanded(child: _statCard('Places disponibles', availableSeats.toString())),
+        Expanded(
+          child: _statCard('Places disponibles', availableSeats.toString()),
+        ),
       ],
     );
   }
 
   Widget _statCard(String label, String value) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE1EAE7)),
-          boxShadow: [
-            BoxShadow(
-              color: primaryBlue.withValues(alpha: 0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFE1EAE7)),
+      boxShadow: [
+        BoxShadow(
+          color: primaryBlue.withValues(alpha: 0.04),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: primaryBlue,
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: textGrey.withValues(alpha: 0.7),
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: primaryBlue,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
         ),
-      );
+        const SizedBox(height: 2),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: textGrey.withValues(alpha: 0.7),
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildFilterTabs() => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE1EAE7)),
-        ),
-        child: Row(
-          children: DriverTripsFilter.values.map((filter) {
-            final selected = _filter == filter;
-            return Expanded(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                decoration: BoxDecoration(
-                  color: selected ? lightBlue : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => setState(() => _filter = filter),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Center(
-                      child: Text(
-                        _labelForFilter(filter),
-                        style: TextStyle(
-                          color: selected ? secondaryBlue : textGrey,
-                          fontSize: 12.5,
-                          fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-                        ),
-                      ),
+    width: double.infinity,
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFE1EAE7)),
+    ),
+    child: Row(
+      children: DriverTripsFilter.values.map((filter) {
+        final selected = _filter == filter;
+        return Expanded(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: selected ? lightBlue : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => setState(() => _filter = filter),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Center(
+                  child: Text(
+                    _labelForFilter(filter),
+                    style: TextStyle(
+                      color: selected ? secondaryBlue : textGrey,
+                      fontSize: 12.5,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
                     ),
                   ),
                 ),
               ),
-            );
-          }).toList(),
-        ),
-      );
+            ),
+          ),
+        );
+      }).toList(),
+    ),
+  );
 
   String _labelForFilter(DriverTripsFilter filter) => switch (filter) {
-        DriverTripsFilter.upcoming => 'À venir',
-        DriverTripsFilter.past => 'Terminé',
-        DriverTripsFilter.cancelled => 'Annulés',
-      };
+    DriverTripsFilter.upcoming => 'À venir',
+    DriverTripsFilter.past => 'Terminé',
+    DriverTripsFilter.cancelled => 'Annulés',
+  };
+
+  Widget _buildSortSelector() => Row(
+    children: [
+      const Icon(Icons.sort_rounded, color: secondaryBlue, size: 19),
+      const SizedBox(width: 8),
+      const Text(
+        'Trier par',
+        style: TextStyle(
+          color: textGrey,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Container(
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: const Color(0xFFE1EAE7)),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<DriverTripsSort>(
+              value: _sort,
+              isExpanded: true,
+              icon: const Icon(Icons.expand_more_rounded, color: secondaryBlue),
+              style: const TextStyle(
+                color: primaryBlue,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+              items: DriverTripsSort.values
+                  .map(
+                    (sort) => DropdownMenuItem(
+                      value: sort,
+                      child: Text(_labelForSort(sort)),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (sort) {
+                if (sort != null) setState(() => _sort = sort);
+              },
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  String _labelForSort(DriverTripsSort sort) => switch (sort) {
+    DriverTripsSort.tripNewest => 'Date du trajet · plus récent',
+    DriverTripsSort.tripOldest => 'Date du trajet · plus ancien',
+    DriverTripsSort.publishedNewest => 'Publication · plus récente',
+    DriverTripsSort.publishedOldest => 'Publication · plus ancienne',
+  };
+
+  List<Trip> _sortedTrips(List<Trip> trips) {
+    return sortDriverTrips(trips, _sort);
+  }
 
   Widget _buildSelectedList() {
-    final items = switch (_filter) {
+    final selectedItems = switch (_filter) {
       DriverTripsFilter.upcoming => _upcomingTrips,
       DriverTripsFilter.past => _pastTrips,
       DriverTripsFilter.cancelled => _cancelledTrips,
     };
+    final items = _sortedTrips(selectedItems);
 
     if (items.isEmpty) {
       return SliverToBoxAdapter(
         child: switch (_filter) {
           DriverTripsFilter.upcoming => _EmptyState(
-              icon: Icons.directions_car_outlined,
-              title: 'Aucun trajet à venir',
-              description:
-                  'Publiez un trajet pour proposer vos places aux autres étudiants.',
-              buttonLabel: 'Publier un trajet',
-              onPressed: () => _showPublishTrip(),
-            ),
+            icon: Icons.directions_car_outlined,
+            title: 'Aucun trajet à venir',
+            description: 'Publiez un trajet pour proposer vos places aux autres étudiants.',
+            buttonLabel: 'Publier un trajet',
+            onPressed: () => _showPublishTrip(),
+          ),
           DriverTripsFilter.past => _EmptyState(
-              icon: Icons.history_rounded,
-              title: 'Aucun trajet terminé',
-              description: 'Vos trajets passés apparaîtront ici.',
-            ),
+            icon: Icons.history_rounded,
+            title: 'Aucun trajet terminé',
+            description: 'Vos trajets passés apparaîtront ici.',
+          ),
           DriverTripsFilter.cancelled => _EmptyState(
-              icon: Icons.cancel_outlined,
-              title: 'Aucun trajet annulé',
-              description: 'Vos trajets annulés apparaîtront ici.',
-            ),
+            icon: Icons.cancel_outlined,
+            title: 'Aucun trajet annulé',
+            description: 'Vos trajets annulés apparaîtront ici.',
+          ),
         },
       );
     }
@@ -321,12 +416,7 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
         (context, index) => _TripCard(
           trip: items[index],
           vehicle: _vehicles[items[index].vehicleId],
-          onDetails: () => _openTripDetails(items[index]),
-          onEdit: () => _editTrip(items[index]),
-          onCancel: () => _cancelTrip(items[index]),
-          onComplete: _filter == DriverTripsFilter.upcoming
-              ? () => _completeTrip(items[index])
-              : null,
+          onTap: () => _openTripDetails(items[index]),
         ),
       ),
     );
@@ -346,11 +436,8 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _EditTripSheet(
-        trip: trip,
-        vehicles: vehicles,
-        user: widget.user,
-      ),
+      builder: (_) =>
+          _EditTripSheet(trip: trip, vehicles: vehicles, user: widget.user),
     );
     if (!mounted) return false;
     if (result == true) await _loadTrips();
@@ -371,153 +458,6 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
     );
     if (!mounted) return;
     await _loadTrips();
-  }
-
-  Future<void> _cancelTrip(Trip trip) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => _CustomDialog(
-        icon: Icons.warning_amber_rounded,
-        title: 'Annuler ce trajet ?',
-        message: 'Les passagers ayant réservé ce trajet devront être informés.',
-        cancelLabel: 'Retour',
-        confirmLabel: 'Annuler le trajet',
-        onCancel: () => Navigator.of(dialogContext).pop(false),
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
-      ),
-    );
-    if (!mounted || confirmed != true) return;
-
-    try {
-      final updated = await _tripRepository.cancelTrip(
-        tripId: trip.id!,
-        driverId: widget.user.id!,
-      );
-      if (updated == 0) {
-        throw StateError('Le trajet n’a pas été trouvé ou ne vous appartient pas.');
-      }
-      if (!mounted) return;
-      refresh();
-      _showInfoDialog(
-        title: 'Trajet annulé',
-        message: 'Le trajet a été marqué comme annulé.',
-        icon: Icons.check_circle_rounded,
-      );
-    } catch (_) {
-      if (!mounted) return;
-      _showInfoDialog(
-        title: 'Annulation impossible',
-        message: 'Impossible d’annuler ce trajet. Réessayez plus tard.',
-        icon: Icons.error_outline_rounded,
-      );
-    }
-  }
-
-  Future<void> _completeTrip(Trip trip) async {
-    final tripId = trip.id;
-    final driverId = widget.user.id;
-    if (tripId == null ||
-        driverId == null ||
-        (trip.status != 'available' && trip.status != 'in_progress')) {
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => _CustomDialog(
-        icon: Icons.check_circle_outline_rounded,
-        title: 'Terminer ce trajet ?',
-        message:
-            'Cette action marquera le trajet comme terminé et ne pourra pas être annulée.',
-        cancelLabel: 'Retour',
-        confirmLabel: 'Terminer le trajet',
-        onCancel: () => Navigator.of(dialogContext).pop(false),
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
-      ),
-    );
-    if (!mounted || confirmed != true) return;
-
-    final arrivalLatitude = trip.arrivalLatitude;
-    final arrivalLongitude = trip.arrivalLongitude;
-    if (arrivalLatitude == null || arrivalLongitude == null) {
-      _showInfoDialog(
-        title: 'Destination indisponible',
-        message: 'Les coordonnées GPS de la destination sont indisponibles.',
-        icon: Icons.location_off_outlined,
-      );
-      return;
-    }
-
-    try {
-      final current = await _locationService.getCurrentLocation();
-      final distanceKm = _geoMatchingService.distanceKm(
-        current,
-        LatLng(arrivalLatitude, arrivalLongitude),
-      );
-      if (distanceKm == null) {
-        _showInfoDialog(
-          title: 'Position indisponible',
-          message: 'Impossible de vérifier la distance jusqu’à la destination.',
-          icon: Icons.location_off_outlined,
-        );
-        return;
-      }
-
-      if (!_geoMatchingService.isWithinTripValidationDistanceKm(distanceKm)) {
-        _showInfoDialog(
-          title: 'Vous êtes trop loin',
-          message:
-              'Vous êtes à ${distanceKm.toStringAsFixed(2)} km de la destination. '
-              'Vous devez être à 2 km maximum pour terminer le trajet.',
-          icon: Icons.location_off_outlined,
-        );
-        return;
-      }
-
-      final updated = await _tripRepository.completeTrip(
-        tripId: tripId,
-        driverId: driverId,
-      );
-      if (updated != 1) {
-        throw StateError(
-          'Le trajet n’est plus disponible ou ne vous appartient pas.',
-        );
-      }
-      await _loadTrips();
-    } on LocationException catch (error) {
-      _showInfoDialog(
-        title: 'Position indisponible',
-        message: error.message,
-        icon: Icons.location_off_outlined,
-      );
-    } catch (_) {
-      _showInfoDialog(
-        title: 'Action impossible',
-        message:
-            'Impossible de terminer ce trajet. Il a peut-être déjà été modifié.',
-        icon: Icons.error_outline_rounded,
-      );
-    }
-  }
-
-  void _showInfoDialog({
-    required String title,
-    required String message,
-    required IconData icon,
-  }) {
-    if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => _CustomDialog(
-        icon: icon,
-        title: title,
-        message: message,
-        cancelLabel: 'Fermer',
-        confirmLabel: 'Compris',
-        onCancel: () => Navigator.of(dialogContext).pop(),
-        onConfirm: () => Navigator.of(dialogContext).pop(),
-      ),
-    );
   }
 
   bool _isDateTimeFuture(Trip trip) {
@@ -541,25 +481,18 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
       int.parse(timeParts[1]),
     );
   }
-
 }
 
 class _TripCard extends StatelessWidget {
   const _TripCard({
     required this.trip,
     required this.vehicle,
-    required this.onDetails,
-    required this.onEdit,
-    required this.onCancel,
-    required this.onComplete,
+    required this.onTap,
   });
 
   final Trip trip;
   final Vehicle? vehicle;
-  final VoidCallback onDetails;
-  final VoidCallback onEdit;
-  final VoidCallback onCancel;
-  final VoidCallback? onComplete;
+  final VoidCallback onTap;
 
   static const Color primaryBlue = Color(0xFF123D68);
   static const Color secondaryBlue = Color(0xFF1E5AA8);
@@ -573,193 +506,187 @@ class _TripCard extends StatelessWidget {
     final statusLabel = trip.status == 'cancelled'
         ? 'Annulé'
         : trip.status == 'available'
-            ? 'Disponible'
-            : trip.status == 'in_progress'
-                ? 'En cours'
-                : trip.status;
+        ? 'Disponible'
+        : trip.status == 'in_progress'
+        ? 'En cours'
+        : trip.status == 'completed'
+        ? 'Terminé'
+        : trip.status;
 
     return Container(
-      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE1EAE7)),
-        boxShadow: [
-          BoxShadow(
-            color: primaryBlue.withValues(alpha: 0.055),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  DateFormat('dd MMM', 'fr_FR').format(DateTime.parse(trip.departureDate)).toUpperCase(),
-                  style: const TextStyle(
-                    color: primaryBlue,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color: trip.status == 'cancelled' ? const Color(0xFFFFEFEF) : lightBlue,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(
-                    color: trip.status == 'cancelled' ? const Color(0xFFBA3A3A) : secondaryBlue,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                trip.departureTime,
-                style: const TextStyle(
-                  color: primaryBlue,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.trip_origin_rounded, color: green, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  trip.departure,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: primaryBlue,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Icon(Icons.arrow_forward_rounded, color: textGrey, size: 18),
-              ),
-              const Icon(Icons.location_on_rounded, color: Color(0xFF1E5AA8), size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  trip.destination,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: primaryBlue,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              _metaRow(Icons.directions_car_rounded, vehicle == null ? 'Véhicule' : '${vehicle!.brand} ${vehicle!.model}'),
-              if (trip.meetingPoint.trim().isNotEmpty)
-                _metaRow(Icons.location_pin, trip.meetingPoint),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          splashColor: lightBlue.withValues(alpha: 0.7),
+          child: Ink(
             decoration: BoxDecoration(
-              color: const Color(0xFFF7FBFA),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFFE1EAE7)),
+              boxShadow: [
+                BoxShadow(
+                  color: primaryBlue.withValues(alpha: 0.055),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-            child: Row(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        DateFormat('dd MMM', 'fr_FR')
+                            .format(DateTime.parse(trip.departureDate))
+                            .toUpperCase(),
+                        style: const TextStyle(
+                          color: primaryBlue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: trip.status == 'cancelled'
+                            ? const Color(0xFFFFEFEF)
+                            : lightBlue,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          color: trip.status == 'cancelled'
+                              ? const Color(0xFFBA3A3A)
+                              : secondaryBlue,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      trip.departureTime,
+                      style: const TextStyle(
+                        color: primaryBlue,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 13),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.trip_origin_rounded,
+                      color: green,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        trip.departure,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: primaryBlue,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(
+                        Icons.arrow_forward_rounded,
+                        color: textGrey,
+                        size: 18,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.location_on_rounded,
+                      color: Color(0xFF1E5AA8),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        trip.destination,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: primaryBlue,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _metaRow(
+                  Icons.directions_car_rounded,
+                  vehicle == null
+                      ? 'Véhicule'
+                      : '${vehicle!.brand} ${vehicle!.model}',
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7FBFA),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Row(
                     children: [
-                      const Icon(Icons.event_seat_rounded, color: green, size: 16),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          bookingSummary,
-                          softWrap: true,
-                          style: const TextStyle(
-                            color: primaryBlue,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.event_seat_rounded,
+                              color: green,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                bookingSummary,
+                                softWrap: true,
+                                style: const TextStyle(
+                                  color: primaryBlue,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                Text(
-                  '${trip.price.toStringAsFixed(0)} TND',
-                  style: const TextStyle(
-                    color: secondaryBlue,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
               ],
             ),
           ),
-          if (trip.status == 'available' ||
-              (trip.status == 'in_progress' && onComplete != null)) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (trip.status == 'available') ...[
-                  _ActionButton(
-                    label: 'Voir détails',
-                    icon: Icons.visibility_outlined,
-                    onPressed: onDetails,
-                  ),
-                  _ActionButton(
-                    label: 'Modifier',
-                    icon: Icons.edit_outlined,
-                    onPressed: onEdit,
-                  ),
-                  _ActionButton(
-                    label: 'Annuler',
-                    icon: Icons.cancel_outlined,
-                    onPressed: onCancel,
-                    danger: true,
-                  ),
-                ],
-                if (onComplete != null)
-                  _ActionButton(
-                    label: 'Terminer',
-                    icon: Icons.check_circle_outline_rounded,
-                    onPressed: onComplete!,
-                  ),
-              ],
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -767,64 +694,29 @@ class _TripCard extends StatelessWidget {
   String _bookingSummary() {
     final booked = trip.totalSeats - trip.availableSeats;
     final remaining = trip.availableSeats;
-    final pending = trip.pendingRequests;
-    if (pending > 0 && booked == 0) {
-      return '$pending demande${pending == 1 ? '' : 's'} en attente';
-    }
     return '$booked place${booked == 1 ? '' : 's'} réservée${booked == 1 ? '' : 's'} • $remaining place${remaining == 1 ? '' : 's'} restante${remaining == 1 ? '' : 's'}';
   }
 
   Widget _metaRow(IconData icon, String value) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: textGrey, size: 15),
-          const SizedBox(width: 5),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 170),
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: textGrey.withValues(alpha: 0.92),
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, color: textGrey, size: 15),
+      const SizedBox(width: 5),
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 170),
+        child: Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: textGrey.withValues(alpha: 0.92),
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
           ),
-        ],
-      );
-}
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.danger = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = danger ? const Color(0xFFB63A3A) : const Color(0xFF1E5AA8);
-    return TextButton.icon(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        foregroundColor: color,
-        backgroundColor: danger ? const Color(0xFFFFF1F1) : const Color(0xFFF6F9FD),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        minimumSize: const Size(0, 34),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
       ),
-      icon: Icon(icon, size: 16),
-      label: Text(label, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
-    );
-  }
+    ],
+  );
 }
 
 class _EditTripSheet extends StatefulWidget {
@@ -872,14 +764,25 @@ class _EditTripSheetState extends State<_EditTripSheet> {
     _priceController.text = widget.trip.price.toStringAsFixed(0);
     _seatsController.text = widget.trip.totalSeats.toString();
     _descriptionController.text = widget.trip.description ?? '';
-    if (widget.trip.departureLatitude != null && widget.trip.departureLongitude != null) {
-      _departurePoint = LatLng(widget.trip.departureLatitude!, widget.trip.departureLongitude!);
+    if (widget.trip.departureLatitude != null &&
+        widget.trip.departureLongitude != null) {
+      _departurePoint = LatLng(
+        widget.trip.departureLatitude!,
+        widget.trip.departureLongitude!,
+      );
     }
-    if (widget.trip.arrivalLatitude != null && widget.trip.arrivalLongitude != null) {
-      _arrivalPoint = LatLng(widget.trip.arrivalLatitude!, widget.trip.arrivalLongitude!);
+    if (widget.trip.arrivalLatitude != null &&
+        widget.trip.arrivalLongitude != null) {
+      _arrivalPoint = LatLng(
+        widget.trip.arrivalLatitude!,
+        widget.trip.arrivalLongitude!,
+      );
     }
     _date = DateTime.parse(widget.trip.departureDate);
-    _time = TimeOfDay(hour: int.parse(widget.trip.departureTime.split(':')[0]), minute: int.parse(widget.trip.departureTime.split(':')[1]));
+    _time = TimeOfDay(
+      hour: int.parse(widget.trip.departureTime.split(':')[0]),
+      minute: int.parse(widget.trip.departureTime.split(':')[1]),
+    );
     _selectedVehicle = widget.vehicles.firstWhere(
       (vehicle) => vehicle.id == widget.trip.vehicleId,
       orElse: () => widget.vehicles.first,
@@ -901,7 +804,9 @@ class _EditTripSheetState extends State<_EditTripSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.88),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+        ),
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -922,7 +827,8 @@ class _EditTripSheetState extends State<_EditTripSheet> {
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -937,28 +843,65 @@ class _EditTripSheetState extends State<_EditTripSheet> {
                       const SizedBox(height: 4),
                       Text(
                         'Modifiez uniquement les informations disponibles pour ce trajet.',
-                        style: TextStyle(color: textGrey, fontSize: 12.5, height: 1.4),
+                        style: TextStyle(
+                          color: textGrey,
+                          fontSize: 12.5,
+                          height: 1.4,
+                        ),
                       ),
                       const SizedBox(height: 18),
-                      _editLocationField('Ville de départ', _departureController, Icons.trip_origin_rounded, true),
+                      _editLocationField(
+                        'Ville de départ',
+                        _departureController,
+                        Icons.trip_origin_rounded,
+                        true,
+                      ),
                       const SizedBox(height: 12),
-                      _editLocationField('Ville d’arrivée', _destinationController, Icons.location_on_rounded, false),
+                      _editLocationField(
+                        'Ville d’arrivée',
+                        _destinationController,
+                        Icons.location_on_rounded,
+                        false,
+                      ),
                       const SizedBox(height: 12),
                       _dateTimeRow(),
                       const SizedBox(height: 12),
-                      _field('Point de rendez-vous', _meetingPointController, Icons.location_pin, false),
+                      _field(
+                        'Point de rendez-vous',
+                        _meetingPointController,
+                        Icons.location_pin,
+                        false,
+                      ),
                       const SizedBox(height: 12),
                       _vehicleSelector(),
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(child: _numericField('Places', _seatsController, Icons.event_seat_rounded)),
+                          Expanded(
+                            child: _numericField(
+                              'Places',
+                              _seatsController,
+                              Icons.event_seat_rounded,
+                            ),
+                          ),
                           const SizedBox(width: 10),
-                          Expanded(child: _numericField('Prix (TND)', _priceController, Icons.euro_rounded)),
+                          Expanded(
+                            child: _numericField(
+                              'Prix (TND)',
+                              _priceController,
+                              Icons.euro_rounded,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _field('Description', _descriptionController, Icons.notes_outlined, false, maxLines: 3),
+                      _field(
+                        'Description',
+                        _descriptionController,
+                        Icons.notes_outlined,
+                        false,
+                        maxLines: 3,
+                      ),
                     ],
                   ),
                 ),
@@ -973,10 +916,19 @@ class _EditTripSheetState extends State<_EditTripSheet> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryBlue,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                     child: _saving
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Text('Enregistrer les modifications'),
                   ),
                 ),
@@ -988,35 +940,52 @@ class _EditTripSheetState extends State<_EditTripSheet> {
     );
   }
 
-  Widget _field(String label, TextEditingController controller, IconData icon, bool required, {int maxLines = 1}) => TextFormField(
+  Widget _field(
+    String label,
+    TextEditingController controller,
+    IconData icon,
+    bool required, {
+    int maxLines = 1,
+  }) => TextFormField(
+    controller: controller,
+    validator: required
+        ? (value) => (value == null || value.trim().isEmpty)
+              ? 'Ce champ est obligatoire.'
+              : null
+        : null,
+    maxLines: maxLines,
+    style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
+    decoration: _inputDecoration(label, icon),
+  );
+
+  Widget _editLocationField(
+    String label,
+    TextEditingController controller,
+    IconData icon,
+    bool isDeparture,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextFormField(
         controller: controller,
-        validator: required ? (value) => (value == null || value.trim().isEmpty) ? 'Ce champ est obligatoire.' : null : null,
-        maxLines: maxLines,
+        readOnly: true,
+        validator: (value) => value == null || value.trim().isEmpty
+            ? 'Ce champ est obligatoire.'
+            : null,
         style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         decoration: _inputDecoration(label, icon),
-      );
-
-  Widget _editLocationField(String label, TextEditingController controller, IconData icon, bool isDeparture) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextFormField(
-            controller: controller,
-            readOnly: true,
-            validator: (value) => value == null || value.trim().isEmpty ? 'Ce champ est obligatoire.' : null,
-            style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
-            decoration: _inputDecoration(label, icon),
-            onTap: () => _pickEditLocation(isDeparture),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () => _pickEditLocation(isDeparture),
-              icon: const Icon(Icons.map_outlined, size: 17),
-              label: const Text('Modifier sur la carte'),
-            ),
-          ),
-        ],
-      );
+        onTap: () => _pickEditLocation(isDeparture),
+      ),
+      Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: () => _pickEditLocation(isDeparture),
+          icon: const Icon(Icons.map_outlined, size: 17),
+          label: const Text('Modifier sur la carte'),
+        ),
+      ),
+    ],
+  );
 
   Future<void> _pickEditLocation(bool isDeparture) async {
     final selection = await Navigator.of(context).push<LocationSelection>(
@@ -1039,94 +1008,112 @@ class _EditTripSheetState extends State<_EditTripSheet> {
     });
   }
 
-  Widget _numericField(String label, TextEditingController controller, IconData icon) => TextFormField(
-        controller: controller,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) return 'Obligatoire.';
-          return null;
-        },
-        decoration: _inputDecoration(label, icon),
-      );
+  Widget _numericField(
+    String label,
+    TextEditingController controller,
+    IconData icon,
+  ) => TextFormField(
+    controller: controller,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
+    validator: (value) {
+      if (value == null || value.trim().isEmpty) return 'Obligatoire.';
+      return null;
+    },
+    decoration: _inputDecoration(label, icon),
+  );
 
   Widget _dateTimeRow() => Row(
-        children: [
-          Expanded(
-            child: InkWell(
+    children: [
+      Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _pickDate,
+          child: Container(
+            height: 58,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFDCE7E3)),
               borderRadius: BorderRadius.circular(14),
-              onTap: _pickDate,
-              child: Container(
-                height: 58,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFDCE7E3)),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_today_rounded, color: green, size: 18),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _date == null ? 'Date du trajet' : DateFormat('dd MMM yyyy', 'fr_FR').format(_date!),
-                        style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w700),
-                      ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today_rounded, color: green, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _date == null
+                        ? 'Date du trajet'
+                        : DateFormat('dd MMM yyyy', 'fr_FR').format(_date!),
+                    style: const TextStyle(
+                      color: primaryBlue,
+                      fontWeight: FontWeight.w700,
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: InkWell(
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _pickTime,
+          child: Container(
+            height: 58,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFDCE7E3)),
               borderRadius: BorderRadius.circular(14),
-              onTap: _pickTime,
-              child: Container(
-                height: 58,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFDCE7E3)),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.access_time_rounded, color: secondaryBlue, size: 18),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _time == null ? 'Heure' : _time!.format(context),
-                        style: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w700),
-                      ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.access_time_rounded, color: secondaryBlue, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _time == null ? 'Heure' : _time!.format(context),
+                    style: const TextStyle(
+                      color: primaryBlue,
+                      fontWeight: FontWeight.w700,
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
-        ],
-      );
+        ),
+      ),
+    ],
+  );
 
   Widget _vehicleSelector() => DropdownButtonFormField<Vehicle>(
-        initialValue: _selectedVehicle,
-        isExpanded: true,
-        decoration: _inputDecoration('Véhicule', Icons.directions_car_rounded),
-        items: widget.vehicles.map((vehicle) {
-          return DropdownMenuItem<Vehicle>(
-            value: vehicle,
-            child: Text('${vehicle.brand} ${vehicle.model} • ${vehicle.licensePlate}'),
-          );
-        }).toList(),
-        onChanged: (vehicle) => setState(() => _selectedVehicle = vehicle),
+    initialValue: _selectedVehicle,
+    isExpanded: true,
+    decoration: _inputDecoration('Véhicule', Icons.directions_car_rounded),
+    items: widget.vehicles.map((vehicle) {
+      return DropdownMenuItem<Vehicle>(
+        value: vehicle,
+        child: Text(
+          '${vehicle.brand} ${vehicle.model} • ${vehicle.licensePlate}',
+        ),
       );
+    }).toList(),
+    onChanged: (vehicle) => setState(() => _selectedVehicle = vehicle),
+  );
 
-  InputDecoration _inputDecoration(String label, IconData icon) => InputDecoration(
+  InputDecoration _inputDecoration(String label, IconData icon) =>
+      InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: secondaryBlue, size: 19),
         filled: true,
         fillColor: const Color(0xFFFCFDFC),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 13,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Color(0xFFDCE7E3)),
@@ -1171,7 +1158,9 @@ class _EditTripSheetState extends State<_EditTripSheet> {
     }
 
     final seats = int.tryParse(_seatsController.text.trim());
-    final price = double.tryParse(_priceController.text.trim().replaceAll(',', '.'));
+    final price = double.tryParse(
+      _priceController.text.trim().replaceAll(',', '.'),
+    );
     if (seats == null || seats < 1 || seats > _selectedVehicle!.seats) {
       _showMessage('Le nombre de places doit être valide pour ce véhicule.');
       return;
@@ -1193,9 +1182,13 @@ class _EditTripSheetState extends State<_EditTripSheet> {
         arrivalLatitude: _arrivalPoint?.latitude,
         arrivalLongitude: _arrivalPoint?.longitude,
         departureDate: DateFormat('yyyy-MM-dd').format(_date!),
-        departureTime: '${_time!.hour.toString().padLeft(2, '0')}:${_time!.minute.toString().padLeft(2, '0')}',
+        departureTime:
+            '${_time!.hour.toString().padLeft(2, '0')}:${_time!.minute.toString().padLeft(2, '0')}',
         totalSeats: seats,
-        availableSeats: math.max(0, seats - (widget.trip.totalSeats - widget.trip.availableSeats)),
+        availableSeats: math.max(
+          0,
+          seats - (widget.trip.totalSeats - widget.trip.availableSeats),
+        ),
         price: price,
         meetingPoint: _meetingPointController.text.trim(),
         description: _descriptionController.text.trim(),
@@ -1218,100 +1211,6 @@ class _EditTripSheetState extends State<_EditTripSheet> {
         content: Text(message),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-}
-
-class _CustomDialog extends StatelessWidget {
-  const _CustomDialog({
-    required this.icon,
-    required this.title,
-    required this.message,
-    this.cancelLabel,
-    this.confirmLabel,
-    this.onCancel,
-    this.onConfirm,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-  final String? cancelLabel;
-  final String? confirmLabel;
-  final VoidCallback? onCancel;
-  final VoidCallback? onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 62,
-              height: 62,
-              decoration: const BoxDecoration(
-                color: Color(0xFFE8F8F1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: const Color(0xFF20B978), size: 28),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF123D68),
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF547080),
-                fontSize: 12.5,
-                height: 1.45,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onCancel,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF123D68),
-                      side: const BorderSide(color: Color(0xFFD7E5E0)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text(cancelLabel ?? 'Retour'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: onConfirm,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF123D68),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text(confirmLabel ?? 'Valider'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1385,7 +1284,9 @@ class _EmptyState extends StatelessWidget {
                   backgroundColor: const Color(0xFF123D68),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
               ),
             ),
@@ -1409,12 +1310,18 @@ class _LoadingState extends StatelessWidget {
             SizedBox(
               width: 28,
               height: 28,
-              child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFF123D68)),
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: Color(0xFF123D68),
+              ),
             ),
             SizedBox(height: 12),
             Text(
               'Chargement de vos trajets...',
-              style: TextStyle(color: Color(0xFF547080), fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: Color(0xFF547080),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -1443,7 +1350,15 @@ class _ErrorState extends StatelessWidget {
           children: [
             const Icon(Icons.error_outline_rounded, color: Color(0xFFB93E36)),
             const SizedBox(width: 10),
-            Expanded(child: Text(message, style: const TextStyle(color: Color(0xFFB93E36), fontWeight: FontWeight.w600))),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Color(0xFFB93E36),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
         ),
       ),

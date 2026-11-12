@@ -5,6 +5,8 @@ class TripDetails {
   final String destination;
   final double? departureLatitude;
   final double? departureLongitude;
+  final double? arrivalLatitude;
+  final double? arrivalLongitude;
   final String departureDate;
   final String departureTime;
   final int totalSeats;
@@ -31,6 +33,8 @@ class TripDetails {
     required this.destination,
     this.departureLatitude,
     this.departureLongitude,
+    this.arrivalLatitude,
+    this.arrivalLongitude,
     required this.departureDate,
     required this.departureTime,
     required this.totalSeats,
@@ -60,6 +64,8 @@ class TripDetails {
       destination: map['destination'] as String,
       departureLatitude: (map['departure_latitude'] as num?)?.toDouble(),
       departureLongitude: (map['departure_longitude'] as num?)?.toDouble(),
+      arrivalLatitude: (map['arrival_latitude'] as num?)?.toDouble(),
+      arrivalLongitude: (map['arrival_longitude'] as num?)?.toDouble(),
       departureDate: map['departure_date'] as String,
       departureTime: map['departure_time'] as String,
       totalSeats: map['total_seats'] as int,
