@@ -4,6 +4,7 @@ import '../database/database_helper.dart';
 import '../models/booking.dart';
 import '../models/trip.dart';
 import '../models/trip_details.dart';
+import '../services/carbon_savings_service.dart';
 import 'notification_repository.dart';
 import 'rating_repository.dart';
 
@@ -653,13 +654,24 @@ class TripRepository {
     );
   }
 
-  Future<int> completeTrip({required int tripId, required int driverId}) async {
+  Future<int> completeTrip({
+    required int tripId,
+    required int driverId,
+    Set<int> confirmedPassengerIds = const {},
+  }) async {
     final db = await _databaseHelper.database;
     final updated = await db.transaction<int>(
-      (transaction) =>
-          markTripCompleted(transaction, tripId: tripId, driverId: driverId),
+      (transaction) => markTripCompleted(
+        transaction,
+        tripId: tripId,
+        driverId: driverId,
+        confirmedPassengerIds: confirmedPassengerIds,
+      ),
     );
-    if (updated == 1) NotificationRepository.notifyChanged();
+    if (updated == 1) {
+      NotificationRepository.notifyChanged();
+      CarbonSavingsService.notifyStatsChanged();
+    }
     return updated;
   }
 
@@ -667,6 +679,7 @@ class TripRepository {
     Transaction transaction, {
     required int tripId,
     required int driverId,
+    Set<int> confirmedPassengerIds = const {},
   }) async {
     final now = DateTime.now().toIso8601String();
     final count = await transaction.update(
@@ -677,6 +690,29 @@ class TripRepository {
       whereArgs: [tripId, driverId],
     );
     if (count == 1) {
+      if (confirmedPassengerIds.isNotEmpty) {
+        final acceptedRows = await transaction.query(
+          'bookings',
+          columns: ['passenger_id'],
+          where: 'trip_id = ? AND status = ?',
+          whereArgs: [tripId, 'accepted'],
+        );
+        final acceptedPassengerIds = acceptedRows
+            .map((row) => row['passenger_id'] as int)
+            .toSet();
+        if (!acceptedPassengerIds.containsAll(confirmedPassengerIds)) {
+          throw StateError(
+            'Only accepted passengers can be confirmed as present.',
+          );
+        }
+        for (final passengerId in confirmedPassengerIds) {
+          await transaction.insert('trip_attendance', {
+            'trip_id': tripId,
+            'passenger_id': passengerId,
+            'confirmed_at': now,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+      }
       await _notifyAcceptedPassengers(
         transaction,
         tripId: tripId,

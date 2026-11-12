@@ -1,4 +1,5 @@
 import '../database/database_helper.dart';
+import '../services/carbon_savings_service.dart';
 import 'rating_repository.dart';
 
 class DriverPreferences {
@@ -34,11 +35,13 @@ class DriverProfileStats {
   final int completedTrips;
   final double? rating;
   final int ratingCount;
+  final double co2SavedGrams;
 
   const DriverProfileStats({
     required this.completedTrips,
     required this.rating,
     required this.ratingCount,
+    required this.co2SavedGrams,
   });
 }
 
@@ -104,12 +107,16 @@ class DriverProfileRepository {
       [userId],
     );
     final ratingStats = await RatingRepository().getPublicStats(userId);
+    final co2SavedGrams = await CarbonSavingsService().getUserTotalSavingsGrams(
+      userId,
+    );
     final tripCount = tripRows.first['trip_count'] as int? ?? 0;
 
     return DriverProfileStats(
       completedTrips: tripCount,
       rating: ratingStats.average,
       ratingCount: ratingStats.count,
+      co2SavedGrams: co2SavedGrams,
     );
   }
 }

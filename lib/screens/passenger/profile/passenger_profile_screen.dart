@@ -6,6 +6,7 @@ import '../../../models/user.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../repositories/booking_repository.dart';
 import '../../../repositories/rating_repository.dart';
+import '../../../services/carbon_savings_service.dart';
 import '../../login/login_screen.dart';
 import '../../shared/profile/rating_history_screen.dart';
 import '../../../utils/logout_flow.dart';
@@ -48,6 +49,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
   double? _averageRating;
   int _ratingCount = 0;
   int _completedTripCount = 0;
+  double _co2SavedGrams = 0;
 
   // ==========================================================
   // INIT
@@ -61,6 +63,11 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
     _fullName = widget.user.fullName;
     _phone = widget.user.phone ?? '';
     _university = widget.user.university ?? '';
+    CarbonSavingsService.statsRevision.addListener(_refreshStatistics);
+    unawaited(_loadStatistics());
+  }
+
+  void _refreshStatistics() {
     unawaited(_loadStatistics());
   }
 
@@ -74,6 +81,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       final results = await Future.wait([
         RatingRepository().getPublicStats(userId),
         BookingRepository().getCompletedPassengerTripCount(userId),
+        CarbonSavingsService().getUserTotalSavingsGrams(userId),
       ]);
       if (!mounted) return;
       final rating = results[0] as ({double? average, int count});
@@ -81,6 +89,7 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
         _averageRating = rating.average;
         _ratingCount = rating.count;
         _completedTripCount = results[1] as int;
+        _co2SavedGrams = results[2] as double;
         _statisticsAvailable = true;
         _statisticsLoading = false;
       });
@@ -434,9 +443,17 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
               child: _buildStatCard(
                 icon: Icons.eco_rounded,
                 iconColor: green,
-                value: '—',
+                value: _statisticsLoading
+                    ? '…'
+                    : _statisticsAvailable
+                    ? CarbonSavingsService.formatGrams(_co2SavedGrams)
+                    : '—',
                 label: 'CO₂ évités',
-                subtitle: 'Calcul en préparation',
+                subtitle: _statisticsLoading
+                    ? 'Chargement'
+                    : !_statisticsAvailable
+                    ? 'Indisponible'
+                    : 'contribution cumulée',
               ),
             ),
           ],
@@ -1509,6 +1526,12 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    CarbonSavingsService.statsRevision.removeListener(_refreshStatistics);
+    super.dispose();
   }
 }
 

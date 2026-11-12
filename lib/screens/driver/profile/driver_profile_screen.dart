@@ -5,6 +5,7 @@ import '../../../models/vehicle.dart';
 import '../../../repositories/driver_profile_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../repositories/vehicle_repository.dart';
+import '../../../services/carbon_savings_service.dart';
 import '../../login/login_screen.dart';
 import '../../shared/profile/rating_history_screen.dart';
 import '../../../utils/logout_flow.dart';
@@ -44,7 +45,18 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     _fullName = widget.user.fullName;
     _phone = widget.user.phone ?? '';
     _university = widget.user.university ?? '';
+    CarbonSavingsService.statsRevision.addListener(_refreshProfileStats);
     _loadProfileData();
+  }
+
+  void _refreshProfileStats() {
+    _loadProfileData();
+  }
+
+  @override
+  void dispose() {
+    CarbonSavingsService.statsRevision.removeListener(_refreshProfileStats);
+    super.dispose();
   }
 
   Future<void> _loadProfileData() async {
@@ -345,9 +357,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           child: _statCard(
             icon: Icons.eco_rounded,
             color: green,
-            value: '—',
+            value: stats == null
+                ? '…'
+                : CarbonSavingsService.formatGrams(stats.co2SavedGrams),
             title: 'CO₂ évité',
-            subtitle: 'Aucune donnée disponible',
+            subtitle: stats == null ? 'Chargement' : 'contribution cumulée',
           ),
         ),
       ],

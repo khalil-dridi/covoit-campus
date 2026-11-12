@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 10,
+      version: 11,
 
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -165,6 +165,8 @@ class DatabaseHelper {
           ON DELETE CASCADE
       )
     ''');
+
+    await migrateTripAttendance(db);
 
     await _createRideRequestsTable(db);
 
@@ -391,6 +393,27 @@ class DatabaseHelper {
     if (oldVersion < 10) {
       await migrateRideRequestCoordinates(db);
     }
+
+    if (oldVersion < 11) {
+      await migrateTripAttendance(db);
+    }
+  }
+
+  static Future<void> migrateTripAttendance(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS trip_attendance (
+        trip_id INTEGER NOT NULL,
+        passenger_id INTEGER NOT NULL,
+        confirmed_at TEXT NOT NULL,
+        PRIMARY KEY (trip_id, passenger_id),
+        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
+        FOREIGN KEY (passenger_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_trip_attendance_passenger_trip
+      ON trip_attendance(passenger_id, trip_id)
+    ''');
   }
 
   static Future<void> migrateRideRequestCoordinates(DatabaseExecutor db) async {

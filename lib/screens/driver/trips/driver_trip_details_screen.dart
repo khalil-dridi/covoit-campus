@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../models/booking.dart';
 import '../../../models/trip_details.dart';
 import '../../../models/user.dart';
+import '../../../repositories/booking_repository.dart';
 import '../../../repositories/trip_repository.dart';
 import '../../../services/geo_matching_service.dart';
 import '../../../services/location_service.dart';
@@ -405,26 +407,11 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
   Future<void> _completeTrip(TripDetails trip) async {
     final driverId = widget.user.id;
     if (_completing || trip.status != 'in_progress' || driverId == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Terminer ce trajet ?'),
-        content: const Text(
-          'Cette action marquera le trajet comme terminé et ne pourra pas être annulée.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Retour'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Terminer le trajet'),
-          ),
-        ],
-      ),
+    final confirmedPassengerIds = await _confirmPassengersAndCompletion(
+      tripId: trip.id,
+      driverId: driverId,
     );
-    if (!mounted || confirmed != true) return;
+    if (!mounted || confirmedPassengerIds == null) return;
 
     final arrivalLatitude = trip.arrivalLatitude;
     final arrivalLongitude = trip.arrivalLongitude;
@@ -457,6 +444,7 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
       final updated = await _repository.completeTrip(
         tripId: trip.id,
         driverId: driverId,
+        confirmedPassengerIds: confirmedPassengerIds,
       );
       if (updated != 1) {
         _showMessage('Ce trajet a déjà été terminé ou ne vous appartient pas.');
@@ -471,6 +459,88 @@ class _DriverTripDetailsScreenState extends State<DriverTripDetailsScreen> {
     } finally {
       if (mounted) setState(() => _completing = false);
     }
+  }
+
+  Future<Set<int>?> _confirmPassengersAndCompletion({
+    required int tripId,
+    required int driverId,
+  }) async {
+    late final List<Booking> acceptedBookings;
+    try {
+      acceptedBookings = (await BookingRepository().getBookingsForDriverTrip(
+        tripId: tripId,
+        driverId: driverId,
+      )).where((booking) => booking.status == 'accepted').toList();
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Impossible de charger les réservations du trajet.');
+      }
+      return null;
+    }
+    if (!mounted) return null;
+    final passengerById = <int, Booking>{};
+    for (final booking in acceptedBookings) {
+      passengerById.putIfAbsent(booking.passengerId, () => booking);
+    }
+    final passengers = passengerById.values.toList(growable: false);
+    final selectedPassengerIds = <int>{};
+
+    return showDialog<Set<int>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          scrollable: true,
+          title: const Text('Terminer ce trajet ?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sélectionnez les passagers réellement transportés. '
+                'Une réservation acceptée ne confirme pas leur présence.',
+              ),
+              if (passengers.isEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('Aucun passager avec une réservation acceptée.'),
+              ] else ...[
+                const SizedBox(height: 8),
+                for (final passenger in passengers)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: selectedPassengerIds.contains(passenger.passengerId),
+                    title: Text(
+                      passenger.passengerName ?? 'Passager',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onChanged: (selected) {
+                      setDialogState(() {
+                        if (selected == true) {
+                          selectedPassengerIds.add(passenger.passengerId);
+                        } else {
+                          selectedPassengerIds.remove(passenger.passengerId);
+                        }
+                      });
+                    },
+                  ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Retour'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(Set<int>.from(selectedPassengerIds)),
+              child: const Text('Terminer le trajet'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _summaryCard(TripDetails trip) {
