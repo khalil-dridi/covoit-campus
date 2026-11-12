@@ -5,6 +5,7 @@ import '../../../models/trip.dart';
 import '../../../models/user.dart';
 import '../../../models/user_profile_context.dart';
 import '../../../repositories/trip_repository.dart';
+import '../../../repositories/trip_favorite_repository.dart';
 import '../../../services/trip_matching_service.dart';
 import '../../driver/publish/location_picker_screen.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
@@ -14,10 +15,7 @@ import '../../../widgets/passenger/passenger_header.dart';
 class PassengerSearchScreen extends StatefulWidget {
   final User user;
 
-  const PassengerSearchScreen({
-    super.key,
-    required this.user,
-  });
+  const PassengerSearchScreen({super.key, required this.user});
 
   @override
   State<PassengerSearchScreen> createState() => _PassengerSearchScreenState();
@@ -31,6 +29,7 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
   static const Color textGrey = Color(0xFF547080);
 
   final TripRepository _tripRepository = TripRepository();
+  final TripFavoriteRepository _favoriteRepository = TripFavoriteRepository();
   final TripMatchingService _tripMatchingService = TripMatchingService();
   final GlobalKey _criteriaKey = GlobalKey();
 
@@ -50,6 +49,56 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
   TripSort _sort = TripSort.earliest;
   List<TripMatch> _results = const [];
   String? _errorMessage;
+  Set<int> _favoriteTripIds = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavoriteIds();
+  }
+
+  Future<void> _loadFavoriteIds() async {
+    final passengerId = widget.user.id;
+    if (passengerId == null) return;
+    try {
+      final ids = await _favoriteRepository.getFavoriteTripIds(passengerId);
+      if (mounted) setState(() => _favoriteTripIds = ids);
+    } catch (_) {
+      // Search remains usable if local favorite storage is temporarily unavailable.
+    }
+  }
+
+  Future<void> _toggleFavorite(Trip trip) async {
+    final passengerId = widget.user.id;
+    final tripId = trip.id;
+    if (passengerId == null || tripId == null) return;
+    final wasFavorite = _favoriteTripIds.contains(tripId);
+    setState(() {
+      if (wasFavorite) {
+        _favoriteTripIds.remove(tripId);
+      } else {
+        _favoriteTripIds.add(tripId);
+      }
+    });
+    try {
+      await _favoriteRepository.toggleFavorite(
+        passengerId: passengerId,
+        tripId: tripId,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (wasFavorite) {
+          _favoriteTripIds.add(tripId);
+        } else {
+          _favoriteTripIds.remove(tripId);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible de mettre à jour ce favori.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +195,9 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
                         Expanded(
                           child: _buildDateTimeField(
                             label: 'Date du trajet',
-                            value: _date == null ? 'Choisir une date' : _formatDate(_date!),
+                            value: _date == null
+                                ? 'Choisir une date'
+                                : _formatDate(_date!),
                             icon: Icons.calendar_today_rounded,
                             onTap: _selectDate,
                           ),
@@ -155,7 +206,9 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
                         Expanded(
                           child: _buildDateTimeField(
                             label: 'Heure',
-                            value: _time == null ? 'Choisir une heure' : _formatTime(_time!),
+                            value: _time == null
+                                ? 'Choisir une heure'
+                                : _formatTime(_time!),
                             icon: Icons.access_time_rounded,
                             onTap: _selectTime,
                           ),
@@ -170,9 +223,11 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _showFilters,
                         icon: const Icon(Icons.tune_rounded, size: 17),
-                        label: Text(_activeFilterCount == 0
-                            ? 'Filtres'
-                            : 'Filtres ($_activeFilterCount)'),
+                        label: Text(
+                          _activeFilterCount == 0
+                              ? 'Filtres'
+                              : 'Filtres ($_activeFilterCount)',
+                        ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: secondaryBlue,
                           side: const BorderSide(color: Color(0xFFDCE7E3)),
@@ -335,7 +390,11 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: Color(0xFFB93E36), size: 18),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFB93E36),
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -390,26 +449,32 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
         if (_results.isEmpty)
           _SearchEmptyState(
             icon: Icons.search_off_rounded,
-          title: _hasSearchCriteria
-            ? 'Aucun trajet trouvé'
-            : 'Ajoutez un critère de recherche',
-          message: _hasSearchCriteria
-            ? 'Nous n’avons trouvé aucun trajet correspondant à vos critères.'
-            : 'Choisissez au moins un critère pour rechercher des trajets.',
-          actionLabel: _hasSearchCriteria ? 'Modifier ma recherche' : null,
-          onAction: _hasSearchCriteria ? _focusCriteria : null,
+            title: _hasSearchCriteria
+                ? 'Aucun trajet trouvé'
+                : 'Ajoutez un critère de recherche',
+            message: _hasSearchCriteria
+                ? 'Nous n’avons trouvé aucun trajet correspondant à vos critères.'
+                : 'Choisissez au moins un critère pour rechercher des trajets.',
+            actionLabel: _hasSearchCriteria ? 'Modifier ma recherche' : null,
+            onAction: _hasSearchCriteria ? _focusCriteria : null,
           )
         else ...[
           _buildResultControls(),
           const SizedBox(height: 10),
-          ..._results.map((match) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _TripResultCard(
-                  match: match,
-                  currentUser: widget.user,
-                  onDetails: () => _openTripDetails(match.trip),
-                ),
-              )),
+          ..._results.map(
+            (match) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _TripResultCard(
+                match: match,
+                currentUser: widget.user,
+                isFavorite:
+                    match.trip.id != null &&
+                    _favoriteTripIds.contains(match.trip.id),
+                onToggleFavorite: () => _toggleFavorite(match.trip),
+                onDetails: () => _openTripDetails(match.trip),
+              ),
+            ),
+          ),
         ],
       ],
     );
@@ -425,17 +490,17 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
           style: _smallControlStyle(),
         ),
         const SizedBox(width: 8),
-        const Text(
-          'Tri',
-          style: TextStyle(color: textGrey, fontSize: 11),
-        ),
+        const Text('Tri', style: TextStyle(color: textGrey, fontSize: 11)),
         const SizedBox(width: 6),
         Expanded(
           child: DropdownButtonFormField<TripSort>(
             initialValue: _sort,
             isExpanded: true,
             decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 6,
+              ),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
@@ -453,9 +518,18 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
               fontWeight: FontWeight.w600,
             ),
             items: const [
-              DropdownMenuItem(value: TripSort.earliest, child: Text('Plus tôt')),
-              DropdownMenuItem(value: TripSort.cheapest, child: Text('Moins cher')),
-              DropdownMenuItem(value: TripSort.bestRated, child: Text('Mieux noté')),
+              DropdownMenuItem(
+                value: TripSort.earliest,
+                child: Text('Plus tôt'),
+              ),
+              DropdownMenuItem(
+                value: TripSort.cheapest,
+                child: Text('Moins cher'),
+              ),
+              DropdownMenuItem(
+                value: TripSort.bestRated,
+                child: Text('Mieux noté'),
+              ),
             ],
             onChanged: (value) {
               if (value == null) return;
@@ -469,12 +543,12 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
   }
 
   ButtonStyle _smallControlStyle() => OutlinedButton.styleFrom(
-        foregroundColor: secondaryBlue,
-        side: const BorderSide(color: Color(0xFFDCE7E3)),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-      );
+    foregroundColor: secondaryBlue,
+    side: const BorderSide(color: Color(0xFFDCE7E3)),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+  );
 
   Future<void> _selectCity({required bool isDeparture}) async {
     if (_isResolvingLocation) return;
@@ -537,10 +611,10 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: Theme.of(context).colorScheme.copyWith(
-                primary: green,
-                onPrimary: Colors.white,
-                surface: Colors.white,
-              ),
+            primary: green,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
         ),
         child: child!,
       ),
@@ -560,10 +634,10 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: Theme.of(context).colorScheme.copyWith(
-                primary: green,
-                onPrimary: Colors.white,
-                surface: Colors.white,
-              ),
+            primary: green,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
         ),
         child: child!,
       ),
@@ -622,8 +696,7 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
           _isSearching = false;
           _hasSearched = true;
           _results = const [];
-          _errorMessage =
-              'Les coordonnées des deux villes sont nécessaires pour la recherche géographique.';
+          _errorMessage = 'Les coordonnées des deux villes sont nécessaires pour la recherche géographique.';
         });
         return;
       }
@@ -655,14 +728,16 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
               tieBreakSort: _sort.name,
             )
           : trips
-              .map((trip) => TripMatch(
+                .map(
+                  (trip) => TripMatch(
                     trip: trip,
                     type: TripMatchType.unranked,
                     departureDistanceKm: null,
                     destinationDistanceKm: null,
                     relevanceScore: null,
-                  ))
-              .toList(growable: false);
+                  ),
+                )
+                .toList(growable: false);
       setState(() {
         _results = matches;
         _hasSearched = true;
@@ -708,15 +783,11 @@ class _PassengerSearchScreenState extends State<PassengerSearchScreen> {
     if (tripId == null) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => TripDetailsScreen(
-          tripId: tripId,
-          user: widget.user,
-        ),
+        builder: (_) => TripDetailsScreen(tripId: tripId, user: widget.user),
       ),
     );
     if (!mounted) return;
   }
-
 }
 
 class _TappableField extends StatelessWidget {
@@ -823,7 +894,9 @@ class _SeatButton extends StatelessWidget {
           foregroundColor: PassengerSearchScreenStateColors.secondaryBlue,
           backgroundColor: const Color(0xFFEAF3FC),
           disabledForegroundColor: const Color(0xFF9EADB5),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(11),
+          ),
         ),
         icon: Icon(icon, size: 18),
       ),
@@ -910,7 +983,11 @@ class _FilterSheetState extends State<_FilterSheet> {
               contentPadding: EdgeInsets.zero,
               activeThumbColor: PassengerSearchScreenStateColors.green,
               title: const Text('Prix maximum'),
-              subtitle: Text(_limitPrice ? '${_maxPrice.round()} DT maximum' : 'Aucune limite'),
+              subtitle: Text(
+                _limitPrice
+                    ? '${_maxPrice.round()} DT maximum'
+                    : 'Aucune limite',
+              ),
               value: _limitPrice,
               onChanged: (value) => setState(() => _limitPrice = value),
             ),
@@ -961,7 +1038,9 @@ class _FilterSheetState extends State<_FilterSheet> {
                   backgroundColor: PassengerSearchScreenStateColors.green,
                   foregroundColor: Colors.white,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
                 ),
                 child: const Text('Appliquer les filtres'),
               ),
@@ -977,9 +1056,17 @@ class _TripResultCard extends StatelessWidget {
   final TripMatch match;
   Trip get trip => match.trip;
   final User currentUser;
+  final bool isFavorite;
+  final VoidCallback onToggleFavorite;
   final VoidCallback onDetails;
 
-  const _TripResultCard({required this.match, required this.currentUser, required this.onDetails});
+  const _TripResultCard({
+    required this.match,
+    required this.currentUser,
+    required this.isFavorite,
+    required this.onToggleFavorite,
+    required this.onDetails,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -993,7 +1080,9 @@ class _TripResultCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE2EBE7)),
         boxShadow: [
           BoxShadow(
-            color: PassengerSearchScreenStateColors.primaryBlue.withValues(alpha: 0.04),
+            color: PassengerSearchScreenStateColors.primaryBlue.withValues(
+              alpha: 0.04,
+            ),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1054,6 +1143,21 @@ class _TripResultCard extends StatelessWidget {
                   ],
                 ),
               ),
+              IconButton(
+                tooltip: isFavorite
+                    ? 'Retirer des favoris'
+                    : 'Ajouter aux favoris',
+                onPressed: onToggleFavorite,
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  isFavorite
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  color: isFavorite
+                      ? const Color(0xFFD85B72)
+                      : PassengerSearchScreenStateColors.textGrey,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -1068,7 +1172,9 @@ class _TripResultCard extends StatelessWidget {
             child: Container(
               width: 2,
               height: 12,
-              color: PassengerSearchScreenStateColors.green.withValues(alpha: 0.55),
+              color: PassengerSearchScreenStateColors.green.withValues(
+                alpha: 0.55,
+              ),
             ),
           ),
           _routePoint(
@@ -1140,13 +1246,19 @@ class _TripResultCard extends StatelessWidget {
                 ),
                 if (trip.driverIsVerified) ...[
                   const SizedBox(width: 4),
-                  const Icon(Icons.verified_rounded,
-                      color: PassengerSearchScreenStateColors.green, size: 14),
+                  const Icon(
+                    Icons.verified_rounded,
+                    color: PassengerSearchScreenStateColors.green,
+                    size: 14,
+                  ),
                 ],
                 if (trip.driverRating != null) ...[
                   const SizedBox(width: 7),
-                  const Icon(Icons.star_rounded,
-                      color: Color(0xFFE7AD34), size: 14),
+                  const Icon(
+                    Icons.star_rounded,
+                    color: Color(0xFFE7AD34),
+                    size: 14,
+                  ),
                   Text(
                     trip.driverRating!.toStringAsFixed(1),
                     style: const TextStyle(
@@ -1183,11 +1295,15 @@ class _TripResultCard extends StatelessWidget {
               TextButton.icon(
                 onPressed: onDetails,
                 style: TextButton.styleFrom(
-                  foregroundColor: PassengerSearchScreenStateColors.secondaryBlue,
+                  foregroundColor:
+                      PassengerSearchScreenStateColors.secondaryBlue,
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                  textStyle: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 icon: const Icon(Icons.arrow_forward_rounded, size: 13),
                 label: const Text('Voir détails'),
@@ -1231,7 +1347,9 @@ class _TripResultCard extends StatelessWidget {
                 style: TextStyle(
                   color: PassengerSearchScreenStateColors.primaryBlue,
                   fontSize: label == 'Départ' ? 13 : 12,
-                  fontWeight: label == 'Départ' ? FontWeight.w800 : FontWeight.w700,
+                  fontWeight: label == 'Départ'
+                      ? FontWeight.w800
+                      : FontWeight.w700,
                 ),
               ),
             ],
@@ -1278,9 +1396,19 @@ class _TripResultCard extends StatelessWidget {
   }
 
   static String _frenchMonth(int month) => const [
-        'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
-        'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
-      ][month - 1];
+    'janv.',
+    'févr.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'août',
+    'sept.',
+    'oct.',
+    'nov.',
+    'déc.',
+  ][month - 1];
 }
 
 class _DriverAvatar extends StatelessWidget {
@@ -1292,7 +1420,8 @@ class _DriverAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final path = image?.trim();
     final uri = path == null ? null : Uri.tryParse(path);
-    final isNetwork = uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+    final isNetwork =
+        uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
     final isAsset = path?.startsWith('assets/') == true;
     Widget content;
     if (path == null || path.isEmpty) {
@@ -1313,20 +1442,18 @@ class _DriverAvatar extends StatelessWidget {
       content = _fallback();
     }
 
-    return ClipOval(
-      child: SizedBox(width: 23, height: 23, child: content),
-    );
+    return ClipOval(child: SizedBox(width: 23, height: 23, child: content));
   }
 
   Widget _fallback() => Container(
-        color: PassengerSearchScreenStateColors.lightBlue,
-        alignment: Alignment.center,
-        child: const Icon(
-          Icons.person_rounded,
-          color: PassengerSearchScreenStateColors.secondaryBlue,
-          size: 15,
-        ),
-      );
+    color: PassengerSearchScreenStateColors.lightBlue,
+    alignment: Alignment.center,
+    child: const Icon(
+      Icons.person_rounded,
+      color: PassengerSearchScreenStateColors.secondaryBlue,
+      size: 15,
+    ),
+  );
 }
 
 class _SearchEmptyState extends StatelessWidget {
@@ -1420,8 +1547,18 @@ abstract final class PassengerSearchScreenStateColors {
 
 String _formatDate(DateTime date) {
   const months = [
-    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+    'janvier',
+    'février',
+    'mars',
+    'avril',
+    'mai',
+    'juin',
+    'juillet',
+    'août',
+    'septembre',
+    'octobre',
+    'novembre',
+    'décembre',
   ];
   return '${date.day} ${months[date.month - 1]} ${date.year}';
 }

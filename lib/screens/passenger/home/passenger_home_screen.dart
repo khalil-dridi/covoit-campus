@@ -10,6 +10,8 @@ import '../../../repositories/ride_request_repository.dart';
 import '../../../widgets/passenger/passenger_header.dart';
 import '../../../widgets/profile/user_profile_preview.dart';
 import '../trips/trip_details_screen.dart';
+import '../trips/passenger_favorites_screen.dart';
+import '../trips/passenger_history_screen.dart';
 import '../requests/ride_request_form_screen.dart';
 import '../requests/ride_request_details_screen.dart';
 
@@ -263,6 +265,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
             title: 'Mes trajets\nfavoris',
             foreground: const Color(0xFFD85B72),
             surface: lightPink,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => PassengerFavoritesScreen(user: widget.user),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 7),
@@ -273,6 +280,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
             title: 'Historique',
             foreground: const Color(0xFFB98522),
             surface: lightYellow,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => PassengerHistoryScreen(user: widget.user),
+              ),
+            ),
           ),
         ),
       ],
