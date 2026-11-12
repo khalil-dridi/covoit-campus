@@ -1,4 +1,5 @@
 import '../database/database_helper.dart';
+import 'rating_repository.dart';
 
 class DriverPreferences {
   final bool smokingAllowed;
@@ -102,19 +103,13 @@ class DriverProfileRepository {
       "SELECT COUNT(*) AS trip_count FROM trips WHERE driver_id = ? AND status = 'completed'",
       [userId],
     );
-    final ratingRows = await db.rawQuery(
-      'SELECT AVG(score) AS average_score, COUNT(*) AS rating_count '
-      'FROM ratings WHERE reviewed_id = ?',
-      [userId],
-    );
+    final ratingStats = await RatingRepository().getPublicStats(userId);
     final tripCount = tripRows.first['trip_count'] as int? ?? 0;
-    final ratingCount = ratingRows.first['rating_count'] as int? ?? 0;
-    final average = ratingRows.first['average_score'];
 
     return DriverProfileStats(
       completedTrips: tripCount,
-      rating: average == null ? null : (average as num).toDouble(),
-      ratingCount: ratingCount,
+      rating: ratingStats.average,
+      ratingCount: ratingStats.count,
     );
   }
 }

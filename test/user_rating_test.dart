@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:covoit_campus/database/database_helper.dart';
+import 'package:covoit_campus/models/rating.dart';
 import 'package:covoit_campus/repositories/rating_repository.dart';
 
 void main() {
@@ -114,13 +115,23 @@ void main() {
         score: 4,
         comment: '  Très bon trajet.  ',
       );
-      final saved = (await db.query(
+      final savedMap = (await db.query(
         'ratings',
         where: 'id = ?',
         whereArgs: [ratingId],
       )).single;
-      expect(saved['score'], 4);
-      expect(saved['comment'], 'Très bon trajet.');
+      final saved = Rating.fromMap(savedMap);
+      expect(saved.score, 4);
+      expect(saved.comment, 'Très bon trajet.');
+      expect(Rating.fromMap(saved.toMap()).toMap(), saved.toMap());
+      expect(
+        (await repository.getRatingsReceivedByUser(driverId)).single.id,
+        ratingId,
+      );
+      expect(
+        (await repository.getRatingsGivenByUser(passengerId)).single.id,
+        ratingId,
+      );
       expect(
         await repository.getEligibility(
           tripId: tripId,

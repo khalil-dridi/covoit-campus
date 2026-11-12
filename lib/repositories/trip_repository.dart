@@ -1,10 +1,11 @@
+import 'package:sqflite/sqflite.dart';
+
 import '../database/database_helper.dart';
 import '../models/booking.dart';
 import '../models/trip.dart';
 import '../models/trip_details.dart';
 import 'notification_repository.dart';
-
-import 'package:sqflite/sqflite.dart';
+import 'rating_repository.dart';
 
 enum TripSort { earliest, cheapest, bestRated }
 
@@ -27,7 +28,9 @@ class TripRepository {
         drivers.full_name AS driver_name,
         drivers.is_verified AS driver_is_verified,
         drivers.profile_image AS driver_profile_image,
-        (SELECT AVG(ratings.score) FROM ratings WHERE ratings.reviewed_id = drivers.id) AS driver_rating
+        (SELECT AVG(ratings.score) FROM ratings
+          WHERE ratings.reviewed_id = drivers.id
+            AND ${RatingRepository.validRatingPredicate}) AS driver_rating
       FROM trips
       INNER JOIN users AS drivers
         ON drivers.id = trips.driver_id
@@ -54,7 +57,9 @@ class TripRepository {
       SELECT trips.*, drivers.full_name AS driver_name,
         drivers.is_verified AS driver_is_verified,
         drivers.profile_image AS driver_profile_image,
-        (SELECT AVG(ratings.score) FROM ratings WHERE ratings.reviewed_id = drivers.id) AS driver_rating
+        (SELECT AVG(ratings.score) FROM ratings
+          WHERE ratings.reviewed_id = drivers.id
+            AND ${RatingRepository.validRatingPredicate}) AS driver_rating
       FROM trips
       INNER JOIN users AS drivers ON drivers.id = trips.driver_id
       ORDER BY trips.departure_date DESC, trips.departure_time DESC, trips.id DESC
@@ -225,7 +230,9 @@ class TripRepository {
       FROM trips
       INNER JOIN users AS drivers ON drivers.id = trips.driver_id
       INNER JOIN vehicles ON vehicles.id = trips.vehicle_id
-      LEFT JOIN ratings ON ratings.reviewed_id = drivers.id
+      LEFT JOIN ratings
+        ON ratings.reviewed_id = drivers.id
+        AND ${RatingRepository.validRatingPredicate}
       WHERE ${where.join(' AND ')}
       GROUP BY trips.id
       ORDER BY $orderBy
@@ -317,11 +324,13 @@ class TripRepository {
           SELECT AVG(ratings.score)
           FROM ratings
           WHERE ratings.reviewed_id = drivers.id
+            AND ${RatingRepository.validRatingPredicate}
         ) AS driver_rating,
         (
           SELECT COUNT(*)
           FROM ratings
           WHERE ratings.reviewed_id = drivers.id
+            AND ${RatingRepository.validRatingPredicate}
         ) AS review_count
       FROM trips
       INNER JOIN users AS drivers
@@ -371,11 +380,13 @@ class TripRepository {
           SELECT AVG(ratings.score)
           FROM ratings
           WHERE ratings.reviewed_id = drivers.id
+            AND ${RatingRepository.validRatingPredicate}
         ) AS driver_rating,
         (
           SELECT COUNT(*)
           FROM ratings
           WHERE ratings.reviewed_id = drivers.id
+            AND ${RatingRepository.validRatingPredicate}
         ) AS review_count,
         (
           SELECT COUNT(*)

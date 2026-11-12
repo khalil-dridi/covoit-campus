@@ -1,9 +1,69 @@
+import 'package:sqflite/sqflite.dart';
+
 import '../database/database_helper.dart';
+import '../models/rating.dart';
+import '../models/rating_history_entry.dart';
 
 enum RatingEligibility { eligible, alreadyRated, unavailable }
 
 class RatingRepository {
   final DatabaseHelper _databaseHelper = DatabaseHelper.instance;
+
+  /// Shared SQL predicate for every displayed rating aggregate.
+  /// The trip/booking joins ensure the two users are its driver and an
+  /// accepted passenger, in either review direction.
+  static const validRatingPredicate = '''
+    ratings.is_legacy_duplicate = 0
+    AND ratings.score BETWEEN 1 AND 5
+    AND ratings.reviewer_id != ratings.reviewed_id
+    AND EXISTS (
+      SELECT 1
+      FROM trips AS rating_trip
+      WHERE rating_trip.id = ratings.trip_id
+        AND rating_trip.status = 'completed'
+        AND (
+          (
+            ratings.reviewer_id = rating_trip.driver_id
+            AND EXISTS (
+              SELECT 1 FROM users AS rating_driver
+              WHERE rating_driver.id = ratings.reviewer_id
+                AND rating_driver.role = 'driver'
+            )
+            AND EXISTS (
+              SELECT 1 FROM users AS rating_passenger
+              WHERE rating_passenger.id = ratings.reviewed_id
+                AND rating_passenger.role = 'passenger'
+            )
+            AND EXISTS (
+              SELECT 1 FROM bookings AS rating_booking
+              WHERE rating_booking.trip_id = rating_trip.id
+                AND rating_booking.passenger_id = ratings.reviewed_id
+                AND rating_booking.status = 'accepted'
+            )
+          )
+          OR
+          (
+            ratings.reviewed_id = rating_trip.driver_id
+            AND EXISTS (
+              SELECT 1 FROM users AS rating_driver
+              WHERE rating_driver.id = ratings.reviewed_id
+                AND rating_driver.role = 'driver'
+            )
+            AND EXISTS (
+              SELECT 1 FROM users AS rating_passenger
+              WHERE rating_passenger.id = ratings.reviewer_id
+                AND rating_passenger.role = 'passenger'
+            )
+            AND EXISTS (
+              SELECT 1 FROM bookings AS rating_booking
+              WHERE rating_booking.trip_id = rating_trip.id
+                AND rating_booking.passenger_id = ratings.reviewer_id
+                AND rating_booking.status = 'accepted'
+            )
+          )
+        )
+    )
+  ''';
 
   Future<RatingEligibility> getEligibility({
     required int tripId,
@@ -149,23 +209,36 @@ class RatingRepository {
           'Vous avez déjà évalué cette personne pour ce trajet.',
         );
       }
-      return txn.insert('ratings', {
-        'trip_id': tripId,
-        'reviewer_id': reviewerId,
-        'reviewed_id': reviewedId,
-        'score': score,
-        'comment': normalizedComment?.isEmpty == true
-            ? null
-            : normalizedComment,
-        'created_at': DateTime.now().toIso8601String(),
-      });
+      final rating = Rating(
+        tripId: tripId,
+        reviewerId: reviewerId,
+        reviewedId: reviewedId,
+        score: score,
+        comment: normalizedComment?.isEmpty == true ? null : normalizedComment,
+        createdAt: DateTime.now().toIso8601String(),
+      );
+      try {
+        return await txn.insert('ratings', rating.toMap());
+      } on DatabaseException catch (error) {
+        if (error.isUniqueConstraintError('ratings.trip_id')) {
+          throw StateError(
+            'Vous avez déjà évalué cette personne pour ce trajet.',
+          );
+        }
+        rethrow;
+      }
     });
   }
 
   Future<({double? average, int count})> getPublicStats(int userId) async {
     final db = await _databaseHelper.database;
     final rows = await db.rawQuery(
-      'SELECT AVG(score) AS average_score, COUNT(*) AS rating_count FROM ratings WHERE reviewed_id = ?',
+      '''
+      SELECT AVG(ratings.score) AS average_score, COUNT(*) AS rating_count
+      FROM ratings
+      WHERE ratings.reviewed_id = ?
+        AND $validRatingPredicate
+      ''',
       [userId],
     );
     final row = rows.first;
@@ -173,5 +246,47 @@ class RatingRepository {
       average: (row['average_score'] as num?)?.toDouble(),
       count: row['rating_count'] as int? ?? 0,
     );
+  }
+
+  Future<List<Rating>> getRatingsReceivedByUser(int userId) async {
+    final entries = await getRatingHistoryReceivedByUser(userId);
+    return entries.map((entry) => entry.rating).toList(growable: false);
+  }
+
+  Future<List<Rating>> getRatingsGivenByUser(int userId) async {
+    final entries = await getRatingHistoryGivenByUser(userId);
+    return entries.map((entry) => entry.rating).toList(growable: false);
+  }
+
+  Future<List<RatingHistoryEntry>> getRatingHistoryReceivedByUser(int userId) =>
+      _getRatingHistory(userId: userId, received: true);
+
+  Future<List<RatingHistoryEntry>> getRatingHistoryGivenByUser(int userId) =>
+      _getRatingHistory(userId: userId, received: false);
+
+  Future<List<RatingHistoryEntry>> _getRatingHistory({
+    required int userId,
+    required bool received,
+  }) async {
+    final db = await _databaseHelper.database;
+    final userColumn = received ? 'reviewed_id' : 'reviewer_id';
+    final otherUserColumn = received ? 'reviewer_id' : 'reviewed_id';
+    final rows = await db.rawQuery(
+      '''
+      SELECT ratings.*, other_user.full_name AS other_user_name,
+             other_user.profile_image AS other_user_profile_image,
+             trips.departure, trips.destination,
+             trips.departure_date AS departure_date
+      FROM ratings
+      INNER JOIN users AS other_user
+        ON other_user.id = ratings.$otherUserColumn
+      LEFT JOIN trips ON trips.id = ratings.trip_id
+      WHERE ratings.$userColumn = ?
+        AND $validRatingPredicate
+      ORDER BY ratings.created_at DESC, ratings.id DESC
+      ''',
+      [userId],
+    );
+    return rows.map(RatingHistoryEntry.fromMap).toList(growable: false);
   }
 }

@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
 
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -233,6 +233,7 @@ class DatabaseHelper {
         score INTEGER NOT NULL,
         comment TEXT,
         created_at TEXT NOT NULL,
+        is_legacy_duplicate INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (trip_id)
           REFERENCES trips(id)
           ON DELETE CASCADE,
@@ -243,6 +244,18 @@ class DatabaseHelper {
           REFERENCES users(id)
           ON DELETE CASCADE
       )
+    ''');
+    await db.execute('''
+      CREATE UNIQUE INDEX idx_ratings_trip_reviewer_reviewed
+      ON ratings(trip_id, reviewer_id, reviewed_id)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_ratings_reviewed_created
+      ON ratings(reviewed_id, created_at)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_ratings_reviewer_created
+      ON ratings(reviewer_id, created_at)
     ''');
 
     // =========================
@@ -370,6 +383,73 @@ class DatabaseHelper {
     if (oldVersion < 8) {
       await migrateTripStartFields(db);
     }
+
+    if (oldVersion < 9) {
+      await migrateRatingsIndexes(db);
+    }
+  }
+
+  /// Adds lookup indexes and enforces one new rating per trip and user pair.
+  /// Existing duplicate rows are retained and marked so a partial unique index
+  /// can protect all new rows without rebuilding the ratings table.
+  static Future<({int duplicateRows, int outOfRangeScores})>
+  migrateRatingsIndexes(DatabaseExecutor db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(ratings)');
+    final existingColumns = columns.map((column) => column['name']).toSet();
+    if (!existingColumns.contains('is_legacy_duplicate')) {
+      await db.execute(
+        'ALTER TABLE ratings ADD COLUMN is_legacy_duplicate INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+
+    final duplicateGroups = await db.rawQuery('''
+      SELECT COALESCE(SUM(row_count - 1), 0) AS duplicate_rows
+      FROM (
+        SELECT COUNT(*) AS row_count
+        FROM ratings
+        GROUP BY trip_id, reviewer_id, reviewed_id
+        HAVING COUNT(*) > 1
+      )
+    ''');
+    final duplicateRows = duplicateGroups.first['duplicate_rows'] as int? ?? 0;
+    final invalidRows = await db.rawQuery(
+      'SELECT COUNT(*) AS row_count FROM ratings WHERE score < 1 OR score > 5',
+    );
+    final outOfRangeScores = invalidRows.first['row_count'] as int? ?? 0;
+
+    if (duplicateRows == 0) {
+      await db.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_ratings_trip_reviewer_reviewed
+        ON ratings(trip_id, reviewer_id, reviewed_id)
+      ''');
+    } else {
+      // Keep every historical row, but flag all but the oldest row in each
+      // duplicate group so the unique partial index can still be installed.
+      await db.execute('''
+        UPDATE ratings
+        SET is_legacy_duplicate = 1
+        WHERE id NOT IN (
+          SELECT MIN(id)
+          FROM ratings
+          GROUP BY trip_id, reviewer_id, reviewed_id
+        )
+      ''');
+      await db.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_ratings_trip_reviewer_reviewed
+        ON ratings(trip_id, reviewer_id, reviewed_id)
+        WHERE is_legacy_duplicate = 0
+      ''');
+    }
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_ratings_reviewed_created
+      ON ratings(reviewed_id, created_at)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_ratings_reviewer_created
+      ON ratings(reviewer_id, created_at)
+    ''');
+
+    return (duplicateRows: duplicateRows, outOfRangeScores: outOfRangeScores);
   }
 
   static Future<void> migrateTripStartFields(DatabaseExecutor db) async {

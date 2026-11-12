@@ -6,6 +6,7 @@ import '../../../repositories/driver_profile_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../repositories/vehicle_repository.dart';
 import '../../login/login_screen.dart';
+import '../../shared/profile/rating_history_screen.dart';
 import '../../../utils/logout_flow.dart';
 
 class DriverProfileScreen extends StatefulWidget {
@@ -88,6 +89,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               const SizedBox(height: 20),
               _sectionHeading('Mon activité'),
               _buildStatistics(),
+              const SizedBox(height: 14),
+              _ratingHistoryButton(),
               const SizedBox(height: 20),
               _buildPersonalInformation(),
               const SizedBox(height: 15),
@@ -350,6 +353,27 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       ],
     );
   }
+
+  Widget _ratingHistoryButton() => SizedBox(
+    width: double.infinity,
+    child: OutlinedButton.icon(
+      onPressed: widget.user.id == null
+          ? null
+          : () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => RatingHistoryScreen(userId: widget.user.id!),
+              ),
+            ),
+      icon: const Icon(Icons.rate_review_outlined),
+      label: const Text('Historique des évaluations'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: primaryBlue,
+        minimumSize: const Size.fromHeight(48),
+        side: const BorderSide(color: lightBlue),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
+  );
 
   Widget _statCard({
     required IconData icon,

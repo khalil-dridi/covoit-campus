@@ -4,9 +4,12 @@ import 'package:intl/intl.dart';
 import '../../../models/booking.dart';
 import '../../../models/user.dart';
 import '../../../repositories/booking_repository.dart';
+import '../../../repositories/rating_repository.dart';
+import '../../../repositories/user_repository.dart';
 import '../../shared/messages/chat_screen.dart';
 import '../../shared/notifications_screen.dart';
 import '../../shared/reporting/report_form_screen.dart';
+import '../../shared/profile/user_rating_screen.dart';
 
 class DriverTripBookingsScreen extends StatefulWidget {
   final int tripId;
@@ -32,7 +35,9 @@ class _DriverTripBookingsScreenState extends State<DriverTripBookingsScreen> {
   static const Color textGrey = Color(0xFF547080);
 
   final BookingRepository _repository = BookingRepository();
+  final RatingRepository _ratingRepository = RatingRepository();
   List<Booking> _bookings = const [];
+  Map<int, RatingEligibility> _ratingEligibilityByPassengerId = const {};
   bool _loading = true;
   String? _error;
   int? _workingBookingId;
@@ -62,9 +67,23 @@ class _DriverTripBookingsScreenState extends State<DriverTripBookingsScreen> {
         tripId: widget.tripId,
         driverId: driverId,
       );
+      final ratingEligibility = <int, RatingEligibility>{};
+      for (final booking in bookings) {
+        if (booking.status != 'accepted' ||
+            booking.tripStatus != 'completed') {
+          continue;
+        }
+        ratingEligibility[booking.passengerId] = await _ratingRepository
+            .getEligibility(
+              tripId: widget.tripId,
+              reviewerId: driverId,
+              reviewedId: booking.passengerId,
+            );
+      }
       if (!mounted) return;
       setState(() {
         _bookings = bookings;
+        _ratingEligibilityByPassengerId = ratingEligibility;
         _loading = false;
       });
     } catch (_) {
@@ -230,9 +249,79 @@ class _DriverTripBookingsScreenState extends State<DriverTripBookingsScreen> {
               ),
             ),
           ],
+          if (booking.status == 'accepted' &&
+              booking.tripStatus == 'completed') ...[
+            const SizedBox(height: 9),
+            if (_ratingEligibilityByPassengerId[booking.passengerId] ==
+                RatingEligibility.eligible)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _workingBookingId == booking.id
+                      ? null
+                      : () => _openRating(booking),
+                  icon: const Icon(Icons.star_outline_rounded, size: 16),
+                  label: const Text('Évaluer le passager'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: secondaryBlue,
+                    side: const BorderSide(color: Color(0xFFDCE7E3)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              )
+            else if (_ratingEligibilityByPassengerId[booking.passengerId] ==
+                RatingEligibility.alreadyRated)
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Chip(
+                  avatar: Icon(Icons.check_circle_outline, size: 17),
+                  label: Text('Passager déjà évalué'),
+                ),
+              ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _openRating(Booking booking) async {
+    final driverId = widget.user.id;
+    if (driverId == null ||
+        widget.user.role != 'driver' ||
+        booking.status != 'accepted' ||
+        booking.tripStatus != 'completed' ||
+        _ratingEligibilityByPassengerId[booking.passengerId] !=
+            RatingEligibility.eligible) {
+      return;
+    }
+    final passenger = await UserRepository().getActiveUserById(
+      booking.passengerId,
+    );
+    if (!mounted) return;
+    if (passenger == null || passenger.role != 'passenger') {
+      await _loadBookings();
+      return;
+    }
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => UserRatingScreen(
+          reviewer: widget.user,
+          reviewed: passenger,
+          tripId: booking.tripId,
+        ),
+      ),
+    );
+    if (!mounted || submitted != true) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Évaluation publiée.')),
+    );
+    await _loadBookings();
   }
 
   Future<void> _openReport(Booking booking) async {
@@ -261,7 +350,9 @@ class _DriverTripBookingsScreenState extends State<DriverTripBookingsScreen> {
   Future<void> _confirmDecision(Booking booking, {required bool accept}) async {
     final bookingId = booking.id;
     final driverId = widget.user.id;
-    if (bookingId == null || driverId == null || widget.user.role != 'driver') return;
+    if (bookingId == null || driverId == null || widget.user.role != 'driver') {
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(

@@ -7,6 +7,7 @@ import '../../../repositories/user_repository.dart';
 import '../../../repositories/booking_repository.dart';
 import '../../../repositories/rating_repository.dart';
 import '../../login/login_screen.dart';
+import '../../shared/profile/rating_history_screen.dart';
 import '../../../utils/logout_flow.dart';
 
 class PassengerProfileScreen extends StatefulWidget {
@@ -120,6 +121,10 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
               const SizedBox(height: 12),
 
               _buildStatistics(),
+
+              const SizedBox(height: 14),
+
+              _ratingHistoryButton(),
 
               const SizedBox(height: 24),
 
@@ -439,6 +444,27 @@ class _PassengerProfileScreenState extends State<PassengerProfileScreen> {
       },
     );
   }
+
+  Widget _ratingHistoryButton() => SizedBox(
+    width: double.infinity,
+    child: OutlinedButton.icon(
+      onPressed: widget.user.id == null
+          ? null
+          : () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => RatingHistoryScreen(userId: widget.user.id!),
+              ),
+            ),
+      icon: const Icon(Icons.rate_review_outlined),
+      label: const Text('Historique des évaluations'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: primaryBlue,
+        minimumSize: const Size.fromHeight(48),
+        side: const BorderSide(color: lightBlue),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
+  );
 
   Widget _buildStatCard({
     required IconData icon,
