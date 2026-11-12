@@ -161,35 +161,117 @@ void main() {
       expect(user.isVerified, isFalse);
     });
 
-    test('migrates legacy profile only after local password proof', () async {
-      final legacy = makeUser(role: 'admin');
-      final repo = _EmailUserRepository(legacy);
-      final service = _FakeEmailFirebaseAuthService(emailVerified: false);
-      final coordinator = AuthCoordinator(
-        firebaseAuthService: service,
-        userRepository: repo,
-      );
-      await expectLater(
-        coordinator.signInWithPassword(
+    test(
+      'migrates default admin even when Firebase email is unverified',
+      () async {
+        final legacy = makeUser(role: 'admin');
+        final repo = _EmailUserRepository(legacy);
+        final service = _FakeEmailFirebaseAuthService(emailVerified: false);
+        final coordinator = AuthCoordinator(
+          firebaseAuthService: service,
+          userRepository: repo,
+        );
+        final signedIn = await coordinator.signInWithPassword(
           email: legacy.email,
           password: 'secret123',
+        );
+        expect(service.emailCreateCalls, 1);
+        expect(service.verificationSends, 0);
+        expect(signedIn.role, 'admin');
+        expect(signedIn.isVerified, isTrue);
+        expect(repo.linkedUser?.id, legacy.id);
+        expect(repo.linkedUser?.role, 'admin');
+        expect(repo.linkedUser?.firebaseUid, 'email-uid');
+        expect(repo.linkedUser?.passwordHash, isEmpty);
+        expect(repo.linkedUser?.isVerified, isTrue);
+      },
+    );
+
+    test('signs in linked admin when Firebase reports unverified', () async {
+      final admin = makeUser(role: 'admin', firebaseUid: 'email-uid');
+      final repo = _EmailUserRepository(admin)..linkedUser = admin;
+      final coordinator = AuthCoordinator(
+        firebaseAuthService: _FakeEmailFirebaseAuthService(
+          emailVerified: false,
         ),
-        throwsA(
-          isA<AuthFlowException>().having(
-            (error) => error.error,
-            'error',
-            AuthFlowError.emailNotVerified,
-          ),
-        ),
+        userRepository: repo,
       );
-      expect(service.emailCreateCalls, 1);
-      expect(service.verificationSends, 0);
-      expect(repo.linkedUser?.id, legacy.id);
-      expect(repo.linkedUser?.role, 'admin');
-      expect(repo.linkedUser?.firebaseUid, 'email-uid');
-      expect(repo.linkedUser?.passwordHash, isEmpty);
-      expect(repo.linkedUser?.isVerified, isFalse);
+
+      final signedIn = await coordinator.signInWithPassword(
+        email: admin.email,
+        password: 'secret123',
+      );
+
+      expect(signedIn.role, 'admin');
+      expect(signedIn.isVerified, isTrue);
+      expect(repo.linkedUser?.isVerified, isTrue);
     });
+
+    test(
+      'restores linked admin session when Firebase reports unverified',
+      () async {
+        final admin = makeUser(role: 'admin', firebaseUid: 'email-uid');
+        final repo = _EmailUserRepository(admin)..linkedUser = admin;
+        final coordinator = AuthCoordinator(
+          firebaseAuthService: _FakeEmailFirebaseAuthService(
+            emailVerified: false,
+          ),
+          userRepository: repo,
+        );
+
+        final restored = await coordinator.restoreSession();
+
+        expect(restored?.role, 'admin');
+        expect(restored?.isVerified, isTrue);
+      },
+    );
+
+    for (final role in ['driver', 'passenger']) {
+      test('$role still requires Firebase email verification', () async {
+        final local = makeUser(role: role, firebaseUid: 'email-uid');
+        final repo = _EmailUserRepository(local)..linkedUser = local;
+        final coordinator = AuthCoordinator(
+          firebaseAuthService: _FakeEmailFirebaseAuthService(
+            emailVerified: false,
+          ),
+          userRepository: repo,
+        );
+
+        await expectLater(
+          coordinator.signInWithPassword(
+            email: local.email,
+            password: 'secret123',
+          ),
+          throwsA(
+            isA<AuthFlowException>().having(
+              (error) => error.error,
+              'error',
+              AuthFlowError.emailNotVerified,
+            ),
+          ),
+        );
+        expect(repo.linkedUser?.isVerified, isFalse);
+      });
+
+      test('$role can sign in after Firebase email verification', () async {
+        final local = makeUser(role: role, firebaseUid: 'email-uid');
+        final repo = _EmailUserRepository(local)..linkedUser = local;
+        final coordinator = AuthCoordinator(
+          firebaseAuthService: _FakeEmailFirebaseAuthService(
+            emailVerified: true,
+          ),
+          userRepository: repo,
+        );
+
+        final signedIn = await coordinator.signInWithPassword(
+          email: local.email,
+          password: 'secret123',
+        );
+
+        expect(signedIn.role, role);
+        expect(signedIn.isVerified, isTrue);
+      });
+    }
 
     test(
       'does not create Firebase identity for invalid legacy password',
@@ -235,7 +317,10 @@ class _FakeUserRepository extends UserRepository {
   Future<User?> findUserByFirebaseUid(String firebaseUid) async => uidUser;
 
   @override
-  Future<User?> syncFirebaseVerification(String firebaseUid, bool verified) async {
+  Future<User?> syncFirebaseVerification(
+    String firebaseUid,
+    bool verified,
+  ) async {
     if (uidUser?.firebaseUid == firebaseUid) {
       uidUser = uidUser!.copyWith(isVerified: verified);
       return uidUser;
@@ -297,7 +382,7 @@ class _EmailUserRepository extends UserRepository {
     linkedUser = existing!.copyWith(
       passwordHash: '',
       firebaseUid: firebaseUid,
-      isVerified: emailVerified,
+      isVerified: existing!.role == 'admin' ? true : emailVerified,
     );
     existing = linkedUser;
     return linkedUser!;
@@ -307,7 +392,14 @@ class _EmailUserRepository extends UserRepository {
   Future<User?> syncFirebaseVerification(
     String firebaseUid,
     bool verified,
-  ) async => linkedUser?.copyWith(isVerified: verified);
+  ) async {
+    final current = linkedUser;
+    if (current == null || current.firebaseUid != firebaseUid) return null;
+    linkedUser = current.copyWith(
+      isVerified: current.role == 'admin' ? true : verified,
+    );
+    return linkedUser;
+  }
 }
 
 class _FakeEmailFirebaseAuthService extends FirebaseAuthService {

@@ -14,6 +14,21 @@ void main() {
 
   final repository = UserRepository();
 
+  test('default administrator is created as active and verified', () async {
+    final db = await DatabaseHelper.instance.database;
+    final admins = await db.query(
+      'users',
+      where: 'email = ?',
+      whereArgs: ['admin@covoitcampus.tn'],
+      limit: 1,
+    );
+
+    expect(admins, hasLength(1));
+    expect(admins.single['role'], 'admin');
+    expect(admins.single['is_verified'], 1);
+    expect(admins.single['is_active'], 1);
+  });
+
   test(
     'links an existing profile without changing its role or password',
     () async {
@@ -186,6 +201,42 @@ void main() {
     );
     expect(synced?.id, created.id);
     expect(synced?.role, 'passenger');
+    expect(synced?.isVerified, isTrue);
+  });
+
+  test('Firebase false verification never un-verifies linked admin', () async {
+    final unique = DateTime.now().microsecondsSinceEpoch;
+    final now = DateTime.now().toIso8601String();
+    final email = 'admin-sync-$unique@example.tn';
+    final id = await repository.registerUser(
+      User(
+        fullName: 'Admin test',
+        email: email,
+        passwordHash: 'legacy-hash',
+        role: 'admin',
+        isVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    addTearDown(() async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('users', where: 'id = ?', whereArgs: [id]);
+    });
+
+    final linked = await repository.linkAuthenticatedEmailAccount(
+      userId: id,
+      email: email,
+      firebaseUid: 'firebase-admin-$unique',
+      emailVerified: false,
+    );
+    final synced = await repository.syncFirebaseVerification(
+      'firebase-admin-$unique',
+      false,
+    );
+
+    expect(linked.isVerified, isTrue);
+    expect(synced?.role, 'admin');
     expect(synced?.isVerified, isTrue);
   });
 

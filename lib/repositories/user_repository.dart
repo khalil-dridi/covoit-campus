@@ -94,7 +94,7 @@ class UserRepository {
         'firebase_uid': firebaseUid,
         // Firebase is now the password authority; discard the legacy verifier.
         'password_hash': '',
-        'is_verified': emailVerified ? 1 : 0,
+        'is_verified': current.role == 'admin' ? 1 : (emailVerified ? 1 : 0),
         'updated_at': DateTime.now().toIso8601String(),
       };
       await txn.update('users', updates, where: 'id = ?', whereArgs: [userId]);
@@ -113,11 +113,15 @@ class UserRepository {
     bool verified,
   ) async {
     final db = await _databaseHelper.database;
+    final current = await findUserByFirebaseUid(firebaseUid);
+    if (current == null) return null;
     await db.update(
       'users',
       {
         'password_hash': '',
-        'is_verified': verified ? 1 : 0,
+        // Admin access is local-role based and never depends on Firebase's
+        // email verification flag. Other roles continue to mirror Firebase.
+        'is_verified': current.role == 'admin' ? 1 : (verified ? 1 : 0),
         'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'firebase_uid = ?',

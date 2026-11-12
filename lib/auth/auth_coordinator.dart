@@ -50,11 +50,14 @@ class AuthCoordinator {
     final local = await _userRepository.findUserByFirebaseUid(identity.uid);
     if (local == null ||
         !local.isActive ||
-        !identity.emailVerified ||
+        (local.role != 'admin' && !identity.emailVerified) ||
         identity.email?.trim().toLowerCase() != local.email.toLowerCase()) {
       return null;
     }
-    return _userRepository.syncFirebaseVerification(identity.uid, true);
+    return _userRepository.syncFirebaseVerification(
+      identity.uid,
+      identity.emailVerified,
+    );
   }
 
   Future<User> registerEmailAccount({
@@ -193,8 +196,9 @@ class AuthCoordinator {
         } catch (_) {}
         rethrow;
       }
-      if (!identity.emailVerified)
+      if (!identity.emailVerified && linked.role != 'admin') {
         throw const AuthFlowException(AuthFlowError.emailNotVerified);
+      }
       return linked;
     }
 
@@ -214,7 +218,7 @@ class AuthCoordinator {
       refreshed.uid,
       refreshed.emailVerified,
     );
-    if (!refreshed.emailVerified) {
+    if (!refreshed.emailVerified && local.role != 'admin') {
       throw const AuthFlowException(AuthFlowError.emailNotVerified);
     }
     if (synced == null || !synced.isActive)
