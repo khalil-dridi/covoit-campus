@@ -11,6 +11,13 @@ class NotificationRepository {
 
   static void notifyChanged() => changes.value++;
 
+  static int? tripLifecycleIdFromType(String? type) {
+    if (type == null) return null;
+    final match = RegExp(r'^trip_(?:started|completed):(\d+)$')
+        .firstMatch(type);
+    return int.tryParse(match?.group(1) ?? '');
+  }
+
   Future<List<AppNotification>> getNotificationsForUser(int userId) async {
     final db = await _databaseHelper.database;
     final rows = await db.query(

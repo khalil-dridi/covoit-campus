@@ -416,7 +416,9 @@ class DriverTripsScreenState extends State<DriverTripsScreen> {
   Future<void> _completeTrip(Trip trip) async {
     final tripId = trip.id;
     final driverId = widget.user.id;
-    if (tripId == null || driverId == null || trip.status != 'available') {
+    if (tripId == null ||
+        driverId == null ||
+        (trip.status != 'available' && trip.status != 'in_progress')) {
       return;
     }
 
@@ -723,28 +725,31 @@ class _TripCard extends StatelessWidget {
               ],
             ),
           ),
-          if (trip.status == 'available') ...[
+          if (trip.status == 'available' ||
+              (trip.status == 'in_progress' && onComplete != null)) ...[
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                _ActionButton(
-                  label: 'Voir détails',
-                  icon: Icons.visibility_outlined,
-                  onPressed: onDetails,
-                ),
-                _ActionButton(
-                  label: 'Modifier',
-                  icon: Icons.edit_outlined,
-                  onPressed: onEdit,
-                ),
-                _ActionButton(
-                  label: 'Annuler',
-                  icon: Icons.cancel_outlined,
-                  onPressed: onCancel,
-                  danger: true,
-                ),
+                if (trip.status == 'available') ...[
+                  _ActionButton(
+                    label: 'Voir détails',
+                    icon: Icons.visibility_outlined,
+                    onPressed: onDetails,
+                  ),
+                  _ActionButton(
+                    label: 'Modifier',
+                    icon: Icons.edit_outlined,
+                    onPressed: onEdit,
+                  ),
+                  _ActionButton(
+                    label: 'Annuler',
+                    icon: Icons.cancel_outlined,
+                    onPressed: onCancel,
+                    danger: true,
+                  ),
+                ],
                 if (onComplete != null)
                   _ActionButton(
                     label: 'Terminer',

@@ -8,6 +8,7 @@ import '../../repositories/message_repository.dart';
 import '../../repositories/notification_repository.dart';
 import '../../screens/driver/bookings/driver_trip_bookings_screen.dart';
 import '../../screens/passenger/trips/passenger_booking_details_screen.dart';
+import '../../screens/passenger/trips/trip_details_screen.dart';
 import '../../screens/shared/messages/chat_screen.dart';
 
 class NotificationDropdown extends StatefulWidget {
@@ -300,6 +301,20 @@ class _NotificationDropdownState extends State<NotificationDropdown> {
     widget.onClose();
 
     final type = notification.type ?? '';
+
+    final lifecycleTripId =
+        NotificationRepository.tripLifecycleIdFromType(type);
+    if (lifecycleTripId != null) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => TripDetailsScreen(
+            tripId: lifecycleTripId,
+            user: widget.user,
+          ),
+        ),
+      );
+      return;
+    }
 
     // ---- Message notification: message:N;trip:N ----
     if (type.startsWith('message:')) {

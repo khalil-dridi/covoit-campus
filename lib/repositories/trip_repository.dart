@@ -640,12 +640,38 @@ class TripRepository {
 
   Future<int> completeTrip({required int tripId, required int driverId}) async {
     final db = await _databaseHelper.database;
-    return db.update(
+    final updated = await db.transaction<int>(
+      (transaction) =>
+          markTripCompleted(transaction, tripId: tripId, driverId: driverId),
+    );
+    if (updated == 1) NotificationRepository.notifyChanged();
+    return updated;
+  }
+
+  static Future<int> markTripCompleted(
+    Transaction transaction, {
+    required int tripId,
+    required int driverId,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    final count = await transaction.update(
       'trips',
-      {'status': 'completed', 'updated_at': DateTime.now().toIso8601String()},
-      where: "id = ? AND driver_id = ? AND status = 'available'",
+      {'status': 'completed', 'updated_at': now},
+      where:
+          "id = ? AND driver_id = ? AND status IN ('available', 'in_progress')",
       whereArgs: [tripId, driverId],
     );
+    if (count == 1) {
+      await _notifyAcceptedPassengers(
+        transaction,
+        tripId: tripId,
+        type: 'trip_completed:$tripId',
+        title: 'Trajet terminé',
+        body: 'Votre trajet est terminé. Vous pouvez maintenant évaluer votre conducteur.',
+        createdAt: now,
+      );
+    }
+    return count;
   }
 
   Future<int> startTrip({
@@ -656,18 +682,22 @@ class TripRepository {
     required DateTime startedAt,
   }) async {
     final db = await _databaseHelper.database;
-    return markTripStarted(
-      db,
-      tripId: tripId,
-      driverId: driverId,
-      latitude: latitude,
-      longitude: longitude,
-      startedAt: startedAt,
+    final updated = await db.transaction<int>(
+      (transaction) => markTripStarted(
+        transaction,
+        tripId: tripId,
+        driverId: driverId,
+        latitude: latitude,
+        longitude: longitude,
+        startedAt: startedAt,
+      ),
     );
+    if (updated == 1) NotificationRepository.notifyChanged();
+    return updated;
   }
 
   static Future<int> markTripStarted(
-    DatabaseExecutor db, {
+    Transaction transaction, {
     required int tripId,
     required int driverId,
     required double latitude,
@@ -675,7 +705,7 @@ class TripRepository {
     required DateTime startedAt,
   }) async {
     final now = DateTime.now().toIso8601String();
-    return db.update(
+    final updated = await transaction.update(
       'trips',
       {
         'status': 'in_progress',
@@ -687,6 +717,42 @@ class TripRepository {
       where: "id = ? AND driver_id = ? AND status = 'available'",
       whereArgs: [tripId, driverId],
     );
+    if (updated == 1) {
+      await _notifyAcceptedPassengers(
+        transaction,
+        tripId: tripId,
+        type: 'trip_started:$tripId',
+        title: 'Trajet commencé',
+        body: 'Votre conducteur a commencé le trajet. Consultez les détails.',
+        createdAt: now,
+      );
+    }
+    return updated;
+  }
+
+  static Future<void> _notifyAcceptedPassengers(
+    Transaction transaction, {
+    required int tripId,
+    required String type,
+    required String title,
+    required String body,
+    required String createdAt,
+  }) async {
+    final passengers = await transaction.rawQuery(
+      "SELECT DISTINCT passenger_id FROM bookings "
+      "WHERE trip_id = ? AND status = 'accepted'",
+      [tripId],
+    );
+    for (final passenger in passengers) {
+      await NotificationRepository.insertInTransaction(
+        transaction: transaction,
+        userId: passenger['passenger_id'] as int,
+        title: title,
+        body: body,
+        type: type,
+        createdAt: createdAt,
+      );
+    }
   }
 
   Future<int> _bookedSeats(Transaction transaction, int tripId) async {

@@ -8,6 +8,7 @@ import '../../repositories/message_repository.dart';
 import '../../repositories/notification_repository.dart';
 import '../driver/bookings/driver_trip_bookings_screen.dart';
 import '../passenger/trips/passenger_booking_details_screen.dart';
+import '../passenger/trips/trip_details_screen.dart';
 import 'messages/chat_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -255,6 +256,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     final type = notification.type ?? '';
+
+    final lifecycleTripId = NotificationRepository.tripLifecycleIdFromType(
+      type,
+    );
+    if (lifecycleTripId != null) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              TripDetailsScreen(tripId: lifecycleTripId, user: widget.user),
+        ),
+      );
+      if (mounted) await _load();
+      return;
+    }
 
     // ---- Message notification: message:N;trip:N or message:N;request:N ----
     if (type.startsWith('message:')) {
