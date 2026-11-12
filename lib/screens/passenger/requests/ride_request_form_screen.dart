@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/user.dart';
 import '../../../repositories/ride_request_repository.dart';
+import '../../driver/publish/location_picker_screen.dart';
 
 class RideRequestFormScreen extends StatefulWidget {
   final User user;
@@ -19,20 +20,18 @@ class _RideRequestFormScreenState extends State<RideRequestFormScreen> {
   static const _background = Color(0xFFF4FFFB);
 
   final _formKey = GlobalKey<FormState>();
-  final _departureController = TextEditingController();
-  final _destinationController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _repository = RideRequestRepository();
   DateTime? _date;
   TimeOfDay? _time;
   int _seats = 1;
+  LocationSelection? _departure;
+  LocationSelection? _destination;
   bool _submitting = false;
   String? _error;
 
   @override
   void dispose() {
-    _departureController.dispose();
-    _destinationController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -58,8 +57,42 @@ class _RideRequestFormScreenState extends State<RideRequestFormScreen> {
     if (selected != null && mounted) setState(() => _time = selected);
   }
 
+  Future<void> _chooseLocation({required bool isDeparture}) async {
+    final selection = await Navigator.of(context).push<LocationSelection>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          title: isDeparture ? 'Ville de départ' : 'Destination',
+          initialPoint: (isDeparture ? _departure : _destination)?.point,
+        ),
+      ),
+    );
+    if (!mounted || selection == null) return;
+    setState(() {
+      if (isDeparture) {
+        _departure = selection;
+      } else {
+        _destination = selection;
+      }
+      _error = null;
+    });
+  }
+
   Future<void> _submit() async {
     if (_submitting || !_formKey.currentState!.validate()) return;
+    if (_departure == null || _destination == null) {
+      setState(
+        () => _error =
+            'Veuillez choisir le départ et la destination sur la carte.',
+      );
+      return;
+    }
+    if (_departure!.point.latitude == _destination!.point.latitude &&
+        _departure!.point.longitude == _destination!.point.longitude) {
+      setState(
+        () => _error = 'Le départ et la destination doivent être différents.',
+      );
+      return;
+    }
     if (_date == null) {
       setState(() => _error = 'Veuillez choisir une date souhaitée.');
       return;
@@ -78,8 +111,12 @@ class _RideRequestFormScreenState extends State<RideRequestFormScreen> {
     try {
       await _repository.createRequest(
         passengerId: passengerId,
-        departure: _departureController.text,
-        destination: _destinationController.text,
+        departure: _departure!.label,
+        destination: _destination!.label,
+        departureLatitude: _departure!.point.latitude,
+        departureLongitude: _departure!.point.longitude,
+        destinationLatitude: _destination!.point.latitude,
+        destinationLongitude: _destination!.point.longitude,
         requestDate: DateFormat('yyyy-MM-dd').format(_date!),
         requestTime: _time == null
             ? null
@@ -151,16 +188,18 @@ class _RideRequestFormScreenState extends State<RideRequestFormScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            _textField(
-              _departureController,
-              label: 'Ville de départ',
+            _pickerTile(
               icon: Icons.trip_origin_rounded,
+              label: 'Ville de départ',
+              value: _departure?.label ?? 'Choisir sur la carte',
+              onTap: () => _chooseLocation(isDeparture: true),
             ),
             const SizedBox(height: 13),
-            _textField(
-              _destinationController,
-              label: 'Destination',
+            _pickerTile(
               icon: Icons.location_on_outlined,
+              label: 'Destination',
+              value: _destination?.label ?? 'Choisir sur la carte',
+              onTap: () => _chooseLocation(isDeparture: false),
             ),
             const SizedBox(height: 13),
             _pickerTile(
@@ -271,19 +310,6 @@ class _RideRequestFormScreenState extends State<RideRequestFormScreen> {
         ),
       ),
     ),
-  );
-
-  Widget _textField(
-    TextEditingController controller, {
-    required String label,
-    required IconData icon,
-  }) => TextFormField(
-    controller: controller,
-    textCapitalization: TextCapitalization.words,
-    validator: (value) => value == null || value.trim().isEmpty
-        ? 'Ce champ est obligatoire.'
-        : null,
-    decoration: _decoration(label, icon),
   );
 
   InputDecoration _decoration(String label, IconData icon) => InputDecoration(

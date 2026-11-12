@@ -8,6 +8,17 @@ import 'package:latlong2/latlong.dart';
 import '../../../services/location_service.dart';
 import '../../../services/place_geocoding_service.dart';
 
+const covoitCampusTileUserAgent =
+    'CovoitCampus/1.0.0 (com.khalildridi.covoitcampus)';
+
+TileLayer buildCovoitCampusTileLayer() => TileLayer(
+  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  userAgentPackageName: 'com.khalildridi.covoitcampus',
+  tileProvider: NetworkTileProvider(
+    headers: {'User-Agent': covoitCampusTileUserAgent},
+  ),
+);
+
 class LocationSelection {
   final LatLng point;
   final String label;
@@ -17,10 +28,16 @@ class LocationSelection {
 class LocationPickerScreen extends StatefulWidget {
   final String title;
   final LatLng? initialPoint;
+  final LocationService? locationService;
+  final PlaceGeocodingService? geocodingService;
+  final bool showMapTiles;
   const LocationPickerScreen({
     super.key,
     required this.title,
     this.initialPoint,
+    this.locationService,
+    this.geocodingService,
+    this.showMapTiles = true,
   });
 
   @override
@@ -34,8 +51,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   static const double _minimumZoom = 4;
   static const double _maximumZoom = 19;
 
-  final _locationService = LocationService();
-  final _geocodingService = PlaceGeocodingService();
+  late final _locationService = widget.locationService ?? LocationService();
+  late final _geocodingService =
+      widget.geocodingService ?? PlaceGeocodingService();
   final _mapController = MapController();
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
@@ -119,23 +137,45 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   Future<void> _searchPlaces(String query, int requestId) async {
-    if (mounted) setState(() => _searching = true);
+    if (!mounted || query.trim().length < 2) return;
+    setState(() {
+      _searching = true;
+      _message = null;
+      _suggestions = const [];
+      _showSuggestions = true;
+    });
     try {
       final results = await _geocodingService.search(query, near: _point);
       if (!mounted || requestId != _searchRequestId) return;
       setState(() {
         _suggestions = results;
         _searching = false;
+        _message = results.isEmpty
+            ? 'Aucun lieu trouvé. Essayez un nom ou une adresse plus précise.'
+            : null;
+      });
+    } on GeocodingException catch (error) {
+      if (!mounted || requestId != _searchRequestId) return;
+      setState(() {
+        _suggestions = const [];
+        _searching = false;
+        _message = error.message;
       });
     } on Object {
       if (!mounted || requestId != _searchRequestId) return;
       setState(() {
         _suggestions = const [];
         _searching = false;
-        _message =
-            'Recherche impossible. Vérifiez votre connexion et réessayez.';
+        _message = 'La recherche a échoué. Réessayez dans un instant.';
       });
     }
+  }
+
+  void _retrySearch() {
+    final query = _searchController.text.trim();
+    if (query.length < 2 || _searching) return;
+    _searchDebounce?.cancel();
+    _searchPlaces(query, ++_searchRequestId);
   }
 
   void _selectSuggestion(PlaceSearchResult result) {
@@ -346,10 +386,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               onMapEvent: _onMapEvent,
             ),
             children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.khalildridi.covoitcampus',
-              ),
+              if (widget.showMapTiles) buildCovoitCampusTileLayer(),
               if (_currentLocation != null)
                 MarkerLayer(
                   markers: [
@@ -586,11 +623,25 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           )
         : _suggestions.isEmpty
         ? Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              _message ??
-                  'Aucun résultat trouvé. Essayez un nom de lieu plus précis.',
-              style: const TextStyle(color: Color(0xFF547080), fontSize: 12),
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _message ??
+                        'Aucun lieu trouvé. Essayez une autre recherche.',
+                    style: const TextStyle(
+                      color: Color(0xFF547080),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _retrySearch,
+                  icon: const Icon(Icons.refresh_rounded, size: 17),
+                  label: const Text('Réessayer'),
+                ),
+              ],
             ),
           )
         : ListView.separated(
@@ -600,28 +651,31 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             separatorBuilder: (_, _) => const Divider(height: 1, indent: 54),
             itemBuilder: (context, index) {
               final result = _suggestions[index];
-              return ListTile(
-                dense: true,
-                leading: const Icon(Icons.place_outlined, color: blue),
-                title: Text(
-                  result.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: navy,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+              return Material(
+                color: Colors.white,
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.place_outlined, color: blue),
+                  title: Text(
+                    result.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: navy,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
                   ),
+                  subtitle: result.subtitle.isEmpty
+                      ? null
+                      : Text(
+                          result.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                  onTap: () => _selectSuggestion(result),
                 ),
-                subtitle: result.subtitle.isEmpty
-                    ? null
-                    : Text(
-                        result.subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                onTap: () => _selectSuggestion(result),
               );
             },
           ),

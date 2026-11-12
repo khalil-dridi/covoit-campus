@@ -44,6 +44,7 @@ dependencies:
   firebase_core: ^5.1.0
   firebase_auth: ^7.0.1
   google_sign_in: ^7.2.0
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -67,6 +68,7 @@ flutter:
 
   assets:
     - assets/images/
+    - .env
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

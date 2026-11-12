@@ -3,6 +3,10 @@ class RideRequest {
   final int passengerId;
   final String departure;
   final String destination;
+  final double? departureLatitude;
+  final double? departureLongitude;
+  final double? destinationLatitude;
+  final double? destinationLongitude;
   final String requestDate;
   final String? requestTime;
   final int seatsRequested;
@@ -18,6 +22,10 @@ class RideRequest {
     required this.passengerId,
     required this.departure,
     required this.destination,
+    this.departureLatitude,
+    this.departureLongitude,
+    this.destinationLatitude,
+    this.destinationLongitude,
     required this.requestDate,
     this.requestTime,
     required this.seatsRequested,
@@ -34,6 +42,10 @@ class RideRequest {
     passengerId: map['passenger_id'] as int,
     departure: map['departure'] as String,
     destination: map['destination'] as String,
+    departureLatitude: (map['departure_latitude'] as num?)?.toDouble(),
+    departureLongitude: (map['departure_longitude'] as num?)?.toDouble(),
+    destinationLatitude: (map['destination_latitude'] as num?)?.toDouble(),
+    destinationLongitude: (map['destination_longitude'] as num?)?.toDouble(),
     requestDate: map['request_date'] as String,
     requestTime: map['request_time'] as String?,
     seatsRequested: map['seats_requested'] as int,
@@ -49,6 +61,10 @@ class RideRequest {
     'passenger_id': passengerId,
     'departure': departure,
     'destination': destination,
+    'departure_latitude': departureLatitude,
+    'departure_longitude': departureLongitude,
+    'destination_latitude': destinationLatitude,
+    'destination_longitude': destinationLongitude,
     'request_date': requestDate,
     'request_time': requestTime,
     'seats_requested': seatsRequested,

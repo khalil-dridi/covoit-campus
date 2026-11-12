@@ -8,6 +8,10 @@ class RideRequestRepository {
     required int passengerId,
     required String departure,
     required String destination,
+    double? departureLatitude,
+    double? departureLongitude,
+    double? destinationLatitude,
+    double? destinationLongitude,
     required String requestDate,
     String? requestTime,
     required int seatsRequested,
@@ -24,6 +28,8 @@ class RideRequestRepository {
         normalizedDestination.toLowerCase()) {
       throw ArgumentError('Le départ et l’arrivée doivent être différents.');
     }
+    _validatePoint(departureLatitude, departureLongitude, 'départ');
+    _validatePoint(destinationLatitude, destinationLongitude, 'destination');
     if (!_isValidDate(requestDate)) {
       throw ArgumentError('Veuillez choisir une date valide.');
     }
@@ -55,6 +61,10 @@ class RideRequestRepository {
         'passenger_id': passengerId,
         'departure': normalizedDeparture,
         'destination': normalizedDestination,
+        'departure_latitude': departureLatitude,
+        'departure_longitude': departureLongitude,
+        'destination_latitude': destinationLatitude,
+        'destination_longitude': destinationLongitude,
         'request_date': requestDate,
         'request_time': time == null || time.isEmpty ? null : time,
         'seats_requested': seatsRequested,
@@ -64,6 +74,21 @@ class RideRequestRepository {
         'updated_at': now,
       });
     });
+  }
+
+  void _validatePoint(double? latitude, double? longitude, String label) {
+    if ((latitude == null) != (longitude == null)) {
+      throw ArgumentError('Coordonnées GPS incomplètes pour le $label.');
+    }
+    if (latitude == null || longitude == null) return;
+    if (!latitude.isFinite ||
+        !longitude.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
+      throw ArgumentError('Coordonnées GPS invalides pour le $label.');
+    }
   }
 
   Future<List<RideRequest>> getRequestsForPassenger(int passengerId) async {

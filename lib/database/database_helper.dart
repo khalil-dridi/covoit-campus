@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 9,
+      version: 10,
 
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -387,6 +387,25 @@ class DatabaseHelper {
     if (oldVersion < 9) {
       await migrateRatingsIndexes(db);
     }
+
+    if (oldVersion < 10) {
+      await migrateRideRequestCoordinates(db);
+    }
+  }
+
+  static Future<void> migrateRideRequestCoordinates(DatabaseExecutor db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(ride_requests)');
+    final existing = columns.map((column) => column['name']).toSet();
+    for (final column in const [
+      'departure_latitude',
+      'departure_longitude',
+      'destination_latitude',
+      'destination_longitude',
+    ]) {
+      if (!existing.contains(column)) {
+        await db.execute('ALTER TABLE ride_requests ADD COLUMN $column REAL');
+      }
+    }
   }
 
   /// Adds lookup indexes and enforces one new rating per trip and user pair.
@@ -533,6 +552,10 @@ class DatabaseHelper {
         passenger_id INTEGER NOT NULL,
         departure TEXT NOT NULL,
         destination TEXT NOT NULL,
+        departure_latitude REAL,
+        departure_longitude REAL,
+        destination_latitude REAL,
+        destination_longitude REAL,
         request_date TEXT NOT NULL,
         request_time TEXT,
         seats_requested INTEGER NOT NULL,
